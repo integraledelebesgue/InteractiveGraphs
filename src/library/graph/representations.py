@@ -4,7 +4,8 @@ from numpy.typing import NDArray
 
 def matrix_to_list(adjacency_matrix: NDArray) -> NDArray:
     return np.array(
-        [np.where(row > 0)[0] for row in adjacency_matrix]
+        [np.where(row > 0)[0] for row in adjacency_matrix],
+        dtype=object
     )
 
 

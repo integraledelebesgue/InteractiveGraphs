@@ -1,16 +1,24 @@
-# This is a sample Python script.
+import numpy as np
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+from src.library.graph.graph import Graph
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+graph = Graph(
+    adjacency_list=np.array([
+        np.array([1, 2, 3]),
+        np.array([0, 2]),
+        np.array([0, 1, 3]),
+        np.array([0, 2])
+    ], dtype=object),
+    adjacency_matrix=np.array([
+        [0, 1, 1, 1],
+        [1, 0, 1, 0],
+        [1, 1, 0, 1],
+        [1, 0, 1, 0]
+    ])
+)
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+print(graph.adjacency_list)
+print(graph.adjacency_matrix)
+print(graph.order)
+print(graph.size)
