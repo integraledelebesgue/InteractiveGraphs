@@ -6,7 +6,9 @@ from typing import Optional
 from src.library.graph.representations import list_to_matrix, matrix_to_list
 
 
-class Graph:  # non-empty, immutable graph
+class Graph:
+    """An immutable graph"""
+
     def __init__(
             self, *,
             adjacency_list: Optional[NDArray] = None,
@@ -14,8 +16,28 @@ class Graph:  # non-empty, immutable graph
             weighted=False,
             directed=False
     ):
+        """
+        Create a graph out of adjacency list and/or matrix given.
+        List and matrix must contain identical graphs
+        or a neighbourhood relation with edge weights for a weighted graph.
+
+            Params:
+                adjacency_list (NDArray[NDArray[int]): an adjacency list
+
+                adjacency_matrix (NDArray[int]): an adjacency matrix; represents edge weights for a weighted graph
+
+                weighted (bool): is the graph weighted
+
+                directed (bool): is the graph directed
+
+            Returns: A graph object
+        """
+
         if adjacency_list is None and adjacency_matrix is None:
             raise AttributeError("At least one graph representation must be specified")
+
+        if weighted and adjacency_matrix is None:
+            raise AttributeError("Weighted graph requires specifying an adjacency matrix")
 
         if adjacency_matrix is not None:
             if not directed and not np.all(np.abs(adjacency_matrix - adjacency_matrix.transpose()) == 0):
