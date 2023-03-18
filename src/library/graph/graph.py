@@ -3,19 +3,18 @@ import numpy as np
 from numpy.typing import NDArray
 from typing import Optional
 
-from src.library.algorithms.traversals.dfs import quick_dfs
 from src.library.graph.representations import list_to_matrix, matrix_to_list
-from src.library.graph.verification import verify
+from src.library.graph.verification import verify_args
 
 
 class Graph:
     """An immutable graph"""
 
-    @verify
+    @verify_args
     def __init__(
             self, *,
-            adjacency_list: Optional[NDArray] = None,
-            adjacency_matrix: Optional[NDArray] = None,
+            adj_list: Optional[NDArray] = None,
+            adj_matrix: Optional[NDArray] = None,
             weighted: bool = False,
             directed: bool = False
     ):
@@ -36,8 +35,8 @@ class Graph:
             Returns: A graph object
         """
 
-        self.__adj_list = adjacency_list
-        self.__adj_matrix = adjacency_matrix
+        self.__adj_list = adj_list
+        self.__adj_matrix = adj_matrix
         self.__weighted = weighted
         self.__directed = directed
 
@@ -50,14 +49,14 @@ class Graph:
         return self.__directed
 
     @cached_property
-    def size(self) -> int:
+    def order(self) -> int:
         return (
             self.__adj_list if self.__adj_list is not None
             else self.__adj_matrix
         ).size
 
     @cached_property
-    def order(self) -> int:
+    def size(self) -> int:
         if self.__adj_list is not None:
             return np.concatenate(self.__adj_list).size // (1 if self.directed else 2)
         else:
@@ -65,14 +64,14 @@ class Graph:
             return adj_matrix_flat[adj_matrix_flat > 0].size // (1 if self.directed else 2)
 
     @cached_property
-    def adjacency_list(self) -> NDArray:
+    def adj_list(self) -> NDArray:
         if self.__adj_list is None:
             self.__adj_list = matrix_to_list(self.__adj_matrix)
 
         return self.__adj_list
 
     @cached_property
-    def adjacency_matrix(self) -> NDArray:
+    def adj_matrix(self) -> NDArray:
         if self.__adj_matrix is None:
             self.__adj_matrix = list_to_matrix(self.__adj_list)
 
@@ -80,10 +79,22 @@ class Graph:
 
     @cached_property
     def connected(self):
-        return quick_dfs(self)
+        return self.__quick_dfs()
 
     def neighbours(self, vertex: int) -> NDArray:
         if self.__adj_list is not None:
             return self.__adj_list[vertex]
         if self.__adj_matrix is not None:
             return np.where(self.__adj_matrix[vertex] > 0)[0]
+
+    def __quick_dfs(self) -> bool:
+        visited = np.zeros(self.order, bool)
+        stack = [0]
+
+        while len(stack) > 0:
+            curr = stack.pop()
+            visited[curr] = True
+            neighbours = self.neighbours(curr)
+            stack.extend(neighbours[visited[neighbours] == False])
+
+        return np.all(visited)
