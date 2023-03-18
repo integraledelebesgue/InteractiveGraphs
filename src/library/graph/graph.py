@@ -16,7 +16,8 @@ class Graph:
             adj_list: Optional[NDArray] = None,
             adj_matrix: Optional[NDArray] = None,
             weighted: bool = False,
-            directed: bool = False
+            directed: bool = False,
+            null_weight: int = 0
     ):
         """
         Create a graph out of adjacency list and/or matrix given.
@@ -32,6 +33,9 @@ class Graph:
 
                 directed (bool): is the graph directed
 
+                null_weight (int): a non-existing edge weight representation
+                used in adjacency matrix for a weighted graph. Either 0 or -1.
+
             Returns: A graph object
         """
 
@@ -39,6 +43,7 @@ class Graph:
         self.__adj_matrix = adj_matrix
         self.__weighted = weighted
         self.__directed = directed
+        self.__null_weight = null_weight
 
     @property
     def weighted(self):
@@ -47,6 +52,10 @@ class Graph:
     @property
     def directed(self):
         return self.__directed
+
+    @property
+    def null_weight(self):
+        return self.__null_weight
 
     @cached_property
     def order(self) -> int:
@@ -61,7 +70,7 @@ class Graph:
             return np.concatenate(self.__adj_list).size // (1 if self.directed else 2)
         else:
             adj_matrix_flat = self.__adj_matrix.flatten()
-            return adj_matrix_flat[adj_matrix_flat > 0].size // (1 if self.directed else 2)
+            return adj_matrix_flat[adj_matrix_flat != self.__null_weight].size // (1 if self.directed else 2)
 
     @cached_property
     def adj_list(self) -> NDArray:
@@ -85,7 +94,7 @@ class Graph:
         if self.__adj_list is not None:
             return self.__adj_list[vertex]
         if self.__adj_matrix is not None:
-            return np.where(self.__adj_matrix[vertex] > 0)[0]
+            return np.where(self.__adj_matrix[vertex] != self.__null_weight)[0]
 
     def __quick_dfs(self) -> bool:
         visited = np.zeros(self.order, bool)

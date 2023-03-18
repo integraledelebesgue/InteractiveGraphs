@@ -11,7 +11,8 @@ def verify_args(graph_constructor: Callable) -> Callable:
             adj_list: Optional[NDArray] = None,
             adj_matrix: Optional[NDArray] = None,
             weighted: bool = False,
-            directed: bool = False
+            directed: bool = False,
+            null_weight: int = 0
     ) -> object:
         if adj_list is None and adj_matrix is None:
             raise AttributeError("At least one graph representation must be specified")
@@ -29,12 +30,16 @@ def verify_args(graph_constructor: Callable) -> Callable:
             if not np.array_equal(list_to_matrix(adj_list), np.sign(adj_matrix)):
                 raise AttributeError("Both representations of undirected graph must contain identical graphs")
 
+        if null_weight not in {0, -1}:
+            raise AttributeError("A null-weight must be set to either 0 or -1")
+
         return graph_constructor(
             self,
             adj_list=adj_list,
             adj_matrix=adj_matrix,
             weighted=weighted,
-            directed=directed
+            directed=directed,
+            null_weight=null_weight
         )
 
     return verifier
@@ -74,6 +79,16 @@ def positive_weights(graph_func: Callable) -> Callable:
     def verifier(graph, *args, **kwargs):
         if not np.all(graph.adj_matrix > 0):
             raise AttributeError(f"Function {graph_func} cannot be performed on a graph with non-positive weights")
+
+        return graph_func(graph, *args, **kwargs)
+
+    return verifier
+
+
+def zero_weight(graph_func: Callable) -> Callable:
+    def verifier(graph, *args, **kwargs):
+        if graph.null_weight == 0:
+            raise AttributeError(f"Function {graph_func} cannot be performed ona a graph with null-weight equal to 0")
 
         return graph_func(graph, *args, **kwargs)
 

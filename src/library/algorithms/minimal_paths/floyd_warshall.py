@@ -7,6 +7,7 @@ from src.library.graph.verification import weighted_only, positive_weights
 
 
 @weighted_only
+@positive_weights
 def floyd_warshall(graph: Graph) -> NDArray:
     n = graph.order
     distance = deepcopy(graph.adj_matrix)
