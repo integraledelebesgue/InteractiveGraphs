@@ -75,14 +75,14 @@ class Graph:
     @cached_property
     def adj_list(self) -> NDArray:
         if self.__adj_list is None:
-            self.__adj_list = matrix_to_list(self.__adj_matrix)
+            self.__adj_list = matrix_to_list(self.__adj_matrix, self.__null_weight)
 
         return self.__adj_list
 
     @cached_property
     def adj_matrix(self) -> NDArray:
         if self.__adj_matrix is None:
-            self.__adj_matrix = list_to_matrix(self.__adj_list)
+            self.__adj_matrix = list_to_matrix(self.__adj_list, self.__null_weight)
 
         return self.__adj_matrix
 
