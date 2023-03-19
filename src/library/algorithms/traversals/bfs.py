@@ -6,13 +6,19 @@ from numpy.typing import NDArray
 from src.library.graph.graph import Graph
 
 
-def bfs(graph: Graph, start: int) -> Tuple[NDArray, NDArray, NDArray, bool]:
-    distance = np.zeros(graph.order, int).fill(-1)
+def bfs(graph: Graph, start: int = 0) -> Tuple[NDArray, NDArray]:
+    distance = np.zeros(graph.order, int)
+    distance.fill(-1)
+
     visited = np.zeros(graph.order, bool)
-    visit_order = []
+
+    traversal_tree = np.zeros(graph.order, int)
+    traversal_tree.fill(-1)
+
     queue = [start]
 
     distance[start] = 0.0
+    traversal_tree[start] = start
 
     while len(queue) > 0:
         curr = queue.pop()
@@ -21,15 +27,17 @@ def bfs(graph: Graph, start: int) -> Tuple[NDArray, NDArray, NDArray, bool]:
             continue
 
         visited[curr] = True
-        visit_order.append(curr)
 
         neighbours = graph.neighbours(curr)
+        neighbours = neighbours[visited[neighbours] == False]
 
         if graph.weighted:
             distance[neighbours] = graph.adj_matrix[curr, neighbours] + distance[curr]
         else:
             distance[neighbours] = distance[curr] + 1
 
+        traversal_tree[neighbours] = curr
+
         queue.extend(neighbours)
 
-    return distance, visited, np.array(visit_order), np.all(visited)
+    return distance, traversal_tree
