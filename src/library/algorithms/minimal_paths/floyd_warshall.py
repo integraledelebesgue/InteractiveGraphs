@@ -25,4 +25,6 @@ def floyd_warshall(graph: Graph) -> NDArray:
                     distance[u, w] + distance[w, v]
                 )
 
-    return distance
+    distance[distance == inf] = -1
+
+    return distance.astype(int)

@@ -9,7 +9,7 @@ from src.library.graph.verification import weighted_only, zero_weight
 @weighted_only
 @zero_weight
 def binary_bfs(graph: Graph, start: int) -> tuple[NDArray, NDArray, NDArray]:
-    """A 0-1-BFS algorithm. Use 0 and 1 as edge weights and -1 for """
+    """A 0-1-BFS algorithm. Uses 0 and 1 as edge weights and -1 for non-existing edges"""
 
     distance = np.zeros(graph.order, int).fill(-1)
     visited = np.zeros(graph.order, bool)

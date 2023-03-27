@@ -1,3 +1,5 @@
+from functools import wraps
+
 import numpy as np
 from typing import Callable, Optional
 from numpy.typing import NDArray
@@ -6,6 +8,7 @@ from src.library.graph.representations import list_to_matrix
 
 
 def verify_args(graph_constructor: Callable) -> Callable:
+    @wraps(graph_constructor)
     def verifier(
             self, *,
             adj_list: Optional[NDArray] = None,
@@ -46,6 +49,7 @@ def verify_args(graph_constructor: Callable) -> Callable:
 
 
 def directed_only(graph_func: Callable) -> Callable:
+    @wraps(graph_func)
     def verifier(graph, *args, **kwargs):
         if not graph.directed:
             raise AttributeError(f"Function {graph_func} cannot be performed on an undirected graph")
@@ -56,6 +60,7 @@ def directed_only(graph_func: Callable) -> Callable:
 
 
 def undirected_only(graph_func: Callable) -> Callable:
+    @wraps(graph_func)
     def verifier(graph, *args, **kwargs):
         if graph.directed:
             raise AttributeError(f"Function {graph_func} cannot be performed on a directed graph")
@@ -66,6 +71,7 @@ def undirected_only(graph_func: Callable) -> Callable:
 
 
 def weighted_only(graph_func: Callable) -> Callable:
+    @wraps(graph_func)
     def verifier(graph, *args, **kwargs):
         if not graph.weighted:
             raise AttributeError(f"Function {graph_func} cannot be performed on a non-weighted graph")
@@ -76,6 +82,7 @@ def weighted_only(graph_func: Callable) -> Callable:
 
 
 def positive_weights(graph_func: Callable) -> Callable:
+    @wraps(graph_func)
     def verifier(graph, *args, **kwargs):
         if not np.all(graph.adj_matrix >= graph.null_weight):
             raise AttributeError(f"Function {graph_func} cannot be performed on a graph with non-positive weights")
@@ -86,6 +93,7 @@ def positive_weights(graph_func: Callable) -> Callable:
 
 
 def zero_weight(graph_func: Callable) -> Callable:
+    @wraps(graph_func)
     def verifier(graph, *args, **kwargs):
         if graph.null_weight == 0:
             raise AttributeError(f"Function {graph_func} cannot be performed ona a graph with null-weight equal to 0")
