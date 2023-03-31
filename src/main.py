@@ -1,28 +1,34 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 from src.library.algorithms.minimal_paths.floyd_warshall import floyd_warshall
 from src.library.graph.graph import Graph
 
 graph = Graph(
     adj_matrix=np.array([
-        [-1, 1, -1, 2],
-        [1, -1, 1, 5],
-        [-1, 1, -1, 1],
-        [2, 5, 1, -1]
+        [-1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, -1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, -1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, -1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, -1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, -1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, -1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, -1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, -1],
     ]),
     weighted=True,
     null_weight=-1
 )
 
-"""
-print(graph.adj_list)
-print(graph.adj_matrix)
-print(graph.order)
-print(graph.size)
-print(graph.connected)
-print(floyd_warshall(graph))
-"""
+graph_view = graph.view()
 
-m_graph = graph.as_mutable()
-print(m_graph.order)
-print(m_graph.connected)
+positions = list(map(lambda node: node.position, graph_view.nodes.values()))
+
+plt.scatter([x[0] for x in positions], [x[1] for x in positions])
+
+graph_view.distribute(200)
+
+positions = list(map(lambda node: node.position, graph_view.nodes.values()))
+
+plt.scatter([x[0] for x in positions], [x[1] for x in positions])
+plt.show()

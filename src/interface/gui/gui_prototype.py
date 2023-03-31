@@ -1,12 +1,30 @@
 import threading
 from dataclasses import dataclass
 
+import numpy as np
 import pygame
 import pygame_gui
 
+from src.library.graph.graph import Graph
 from src.library.graph.prototype_graph_view import PrototypeGraphView
 
 window_size = (1600, 1200)
+
+test_graph = Graph(
+    adj_matrix=np.array([
+        [-1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, -1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, -1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, -1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, -1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, -1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, -1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, -1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, -1],
+    ]),
+    weighted=True,
+    null_weight=-1
+)
 
 
 def set_handler(self, handler):
@@ -55,7 +73,7 @@ class App(threading.Thread):
         self.top_margin = 15
         self.bottom_margin = 15
 
-        self.graph_view = PrototypeGraphView()
+        self.graph_view = test_graph.view()
 
         self.graph_area_corner = (self.left_margin + 120, self.top_margin)
         self.graph_area_size = (1445, 1170)
@@ -226,7 +244,7 @@ class App(threading.Thread):
                 4
             )
 
-        for node in self.graph_view.nodes:
+        for node in self.graph_view.nodes.values():
             pygame.draw.circle(
                 self.window_surface,
                 '#0086b3',

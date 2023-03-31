@@ -1,9 +1,10 @@
-from functools import cached_property
+from functools import cached_property, singledispatchmethod
 from typing import Optional, List
 
 import numpy as np
 from numpy.typing import NDArray
 
+from src.library.algorithms.drawing.fruchterman_reingolds import distribute_fruchterman_reingold
 from src.library.graph.representations import list_to_matrix, matrix_to_list
 from src.library.graph.verification import verify_args
 
@@ -192,7 +193,7 @@ class MutableGraph(Graph):
     @property
     @lazy
     def edges(self) -> NDArray:
-        return np.array(
+        return np.fromiter(
             zip(
                 *np.where(
                     (self._adj_matrix
@@ -200,7 +201,8 @@ class MutableGraph(Graph):
                      else np.triu(self._adj_matrix, 0))
                     != self._null_weight
                 )
-            )
+            ),
+            dtype=object
         )
 
     @property
@@ -251,12 +253,19 @@ class MutableGraph(Graph):
 
 class Node:
     def __init__(self, vertex, position: tuple[int, int] | None = None):
-        self.x = position[0] if position else 0
-        self.y = position[1] if position else 0
+        self.position = np.array(position)
         self.vertex = vertex
 
-    def shift(self, displacement: tuple[int, int]) -> tuple[int, int]:
-        return self.x + displacement[0], self.y + displacement[1]
+    @property
+    def x(self):
+        return self.position[0]
+
+    @property
+    def y(self):
+        return self.position[1]
+
+    def shift(self, offset: tuple[int, int]) -> tuple[int, int]:
+        return tuple(self.position + offset)
 
 
 class GraphView:
@@ -266,9 +275,16 @@ class GraphView:
             if isinstance(graph, MutableGraph)\
             else graph.as_mutable()
 
-        self.__nodes = list(map(Node, range(self.__graph.order)))
-        self.__edges = list(map(tuple, self.__graph.edges))
         self.__canvas = (1000, 1000)
+        self.__nodes = dict(zip(
+            range(self.__graph.order),
+            map(
+                lambda vertex: Node(vertex, tuple(np.random.uniform(0, min(self.__canvas), 2))),
+                range(self.__graph.order)
+            )
+        ))
+
+        self.__edges = list(map(lambda edge: (self.__nodes[edge[0]], self.__nodes[edge[1]]), self.__graph.edges))
 
     @property
     def graph(self):
@@ -293,12 +309,25 @@ class GraphView:
         else:
             raise Exception('')
 
-    def __emplace(self):
+    @singledispatchmethod
+    def neighbours(self, node: Node | int) -> List[Node | int]:
         pass
+
+    @neighbours.register(Node)
+    def _node_neighbours(self, node: Node) -> List[Node]:
+        return list(map(lambda vertex: self.__nodes[vertex], self.__graph.neighbours(node.vertex)))
+
+    @neighbours.register(int)
+    def _node_neighbours(self, vertex: int) -> List[Node]:
+        return list(map(lambda vtx: self.__nodes[vtx], self.__graph.neighbours(vertex)))
+
+    def distribute(self, ideal_length: int):
+        distribute_fruchterman_reingold(self, ideal_length, 0.9, 500, 1000)
 
     def add_node(self, position):
         self.__graph.add_vertex([])
-        self.__nodes.append(Node(len(self.__nodes), position))
+        number = len(self.__nodes)
+        self.__nodes[number] = Node(number, position)
 
     def add_edge(self, start, end):
         self.__graph.add_edge(start, end)
