@@ -1,5 +1,5 @@
-from functools import cached_property, singledispatchmethod, cache
-from typing import Optional
+from functools import cached_property
+from typing import Optional, List
 
 import numpy as np
 from numpy.typing import NDArray
@@ -212,7 +212,7 @@ class MutableGraph(Graph):
     def neighbours(self, vertex: int):
         return self._adj_list[vertex]
 
-    def add_vertex(self, neighbours: NDArray):
+    def add_vertex(self, neighbours: NDArray[int] | List[int]):
         pass
 
     def add_edge(self, start: int, end: int):
@@ -249,26 +249,57 @@ class MutableGraph(Graph):
         self._adj_matrix[*self.__lazy_edges] = self.__lazy_weights
 
 
+class Node:
+    def __init__(self, vertex, position: tuple[int, int] | None = None):
+        self.x = position[0] if position else 0
+        self.y = position[1] if position else 0
+        self.vertex = vertex
+
+    def shift(self, displacement: tuple[int, int]) -> tuple[int, int]:
+        return self.x + displacement[0], self.y + displacement[1]
+
+
 class GraphView:
-    @singledispatchmethod
-    def __init__(self, *args, **kwargs):
-        raise Exception("")
 
-    @__init__.register(MutableGraph)
-    def __init_empty(self, mut_graph: MutableGraph):
-        self.__graph = mut_graph
+    def __init__(self, graph: Graph | MutableGraph):
+        self.__graph = graph\
+            if isinstance(graph, MutableGraph)\
+            else graph.as_mutable()
 
-    @__init__.register(Graph)
-    def __init_from_graph(self, graph: Graph):
-        self.__graph = graph.as_mutable()
+        self.__nodes = list(map(Node, range(self.__graph.order)))
+        self.__edges = list(map(tuple, self.__graph.edges))
+        self.__canvas = (1000, 1000)
+
+    @property
+    def graph(self):
+        return self.__graph
+
+    @property
+    def nodes(self):
+        return self.__nodes
+
+    @property
+    def edges(self):
+        return self.__edges
+
+    @property
+    def canvas(self):
+        return self.__canvas
+
+    @canvas.setter
+    def canvas(self, size: tuple[int, int]):
+        if min(size) > 0:
+            self.__canvas = size
+        else:
+            raise Exception('')
 
     def __emplace(self):
         pass
 
-    @property
-    def as_graph(self):
-        return None
+    def add_node(self, position):
+        self.__graph.add_vertex([])
+        self.__nodes.append(Node(len(self.__nodes), position))
 
-    @property
-    def nodes(self):
-        return None
+    def add_edge(self, start, end):
+        self.__graph.add_edge(start, end)
+        self.__edges.append((start, end))
