@@ -1,7 +1,6 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
-from src.library.algorithms.minimal_paths.floyd_warshall import floyd_warshall
 from src.library.graph.graph import Graph
 
 graph = Graph(
