@@ -1,3 +1,4 @@
+import pickle
 from functools import cached_property, singledispatchmethod
 from typing import Optional, List
 
@@ -126,8 +127,17 @@ class Graph:
     def as_mutable(self) -> 'MutableGraph':
         return MutableGraph(self)
 
-    def view(self):
-        return GraphView(self)
+    def view(self, *args):
+        return GraphView(self, *args)
+
+    @staticmethod
+    def from_file(filepath: str):
+        with open(filepath, 'rb') as file:
+            return pickle.load(file)
+
+    def to_file(self, filepath: str) -> None:
+        with open(filepath, 'wb') as file:
+            pickle.dump(self, file, pickle.HIGHEST_PROTOCOL)
 
 
 class MutableGraph(Graph):
@@ -270,12 +280,15 @@ class Node:
 
 class GraphView:
 
-    def __init__(self, graph: Graph | MutableGraph):
+    def __init__(self, graph: Graph | MutableGraph, canvas_size: Optional[tuple[int, int]] = None):
         self.__graph = graph\
             if isinstance(graph, MutableGraph)\
             else graph.as_mutable()
 
-        self.__canvas = (1000, 1000)
+        self.__canvas = canvas_size \
+            if canvas_size is not None \
+            else (1000, 1000)
+
         self.__nodes = dict(zip(
             range(self.__graph.order),
             map(
@@ -308,6 +321,13 @@ class GraphView:
             self.__canvas = size
         else:
             raise Exception('')
+
+    @classmethod
+    def from_file(cls, filepath: str) -> 'GraphView':
+        return cls(Graph.from_file(filepath))
+
+    def to_file(self, filepath: str) -> None:
+        self.__graph.to_file(filepath)
 
     @singledispatchmethod
     def neighbours(self, node: Node | int) -> List[Node | int]:
