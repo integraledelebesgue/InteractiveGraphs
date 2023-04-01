@@ -1,6 +1,7 @@
 import threading
 from dataclasses import dataclass
 from os import getcwd
+from typing import Any
 
 import numpy as np
 import pygame
@@ -191,7 +192,7 @@ class App(threading.Thread):
             active=False
         )
 
-    def run(self):
+    def run(self) -> None:
         self.running = True
         while self.running:
             time_delta = self.clock.tick(60) / 1000.
@@ -280,17 +281,17 @@ class App(threading.Thread):
         self.quit()
 
     @staticmethod
-    def quit():
+    def quit() -> None:
         pygame.quit()
         quit()
 
-    def open_context_menu(self, position):
+    def open_context_menu(self, position) -> None:
         self.context_menu.container.set_position(position)
 
-    def close_context_menu(self):
+    def close_context_menu(self) -> None:
         self.open_context_menu((-200, -200))
 
-    def draggable_collision(self, position):
+    def draggable_collision(self, position) -> Any:
         return next(
             filter(
                 lambda el: el.collidepoint(position),
@@ -299,11 +300,11 @@ class App(threading.Thread):
             None
         )
 
-    def node_collision(self, position):
+    def node_collision(self, position) -> bool:
         if not self.graph_view and position:
             return False
 
-    def draw_graph(self):
+    def draw_graph(self) -> None:
         pygame.draw.rect(
             self.window_surface,
             '#f5f5f0',
@@ -335,10 +336,10 @@ class App(threading.Thread):
                 3
             )
 
-    def load_graph(self, filepath: str):
+    def load_graph(self, filepath: str) -> None:
         self.graph_view = GraphView.from_file(filepath)
 
-    def save_graph(self, filepath: str):
+    def save_graph(self, filepath: str) -> None:
         self.graph_view.to_file(filepath)
 
 

@@ -1,6 +1,6 @@
 import pickle
 from functools import cached_property, singledispatchmethod
-from typing import Optional, List
+from typing import Optional, List, Union, Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -49,15 +49,15 @@ class Graph:
         self._null_weight = null_weight
 
     @property
-    def weighted(self):
+    def weighted(self) -> bool:
         return self._weighted
 
     @property
-    def directed(self):
+    def directed(self) -> bool:
         return self._directed
 
     @property
-    def null_weight(self):
+    def null_weight(self) -> int:
         return self._null_weight
 
     @cached_property
@@ -103,7 +103,7 @@ class Graph:
         )
 
     @cached_property
-    def connected(self):
+    def connected(self) -> bool:
         return self._quick_dfs()
 
     def neighbours(self, vertex: int) -> NDArray:
@@ -127,13 +127,18 @@ class Graph:
     def as_mutable(self) -> 'MutableGraph':
         return MutableGraph(self)
 
-    def view(self, *args):
+    def view(self, *args) -> 'GraphView':
         return GraphView(self, *args)
 
-    @staticmethod
-    def from_file(filepath: str):
+    @classmethod
+    def from_file(cls, filepath: str) -> Union['Graph', 'MutableGraph']:
         with open(filepath, 'rb') as file:
-            return pickle.load(file)
+            obj = pickle.load(file)
+
+        if not isinstance(obj, cls):
+            raise Exception('')
+
+        return obj
 
     def to_file(self, filepath: str) -> None:
         with open(filepath, 'wb') as file:
@@ -157,7 +162,7 @@ class MutableGraph(Graph):
 
         self.__modified = False
 
-    def __init_from_graph(self, graph: Graph):
+    def __init_from_graph(self, graph: Graph) -> None:
         _force_computation = graph.adj_matrix, graph.adj_list, graph.order, graph.size, graph.connected
 
         for name, value in filter(
@@ -170,7 +175,7 @@ class MutableGraph(Graph):
             self.__setattr__(name, value)
 
     @staticmethod
-    def lazy(method):
+    def lazy(method: Callable) -> Callable:
         def inner(self, *args, **kwargs):
             name = f'__lazy_{method}'
 
@@ -187,7 +192,7 @@ class MutableGraph(Graph):
 
     @property
     @lazy
-    def order(self):
+    def order(self) -> int:
         return self._adj_list.shape[0]
 
     @property
@@ -221,25 +226,25 @@ class MutableGraph(Graph):
         return self._quick_dfs()
 
     @lazy
-    def neighbours(self, vertex: int):
+    def neighbours(self, vertex: int) -> list[int]:
         return self._adj_list[vertex]
 
-    def add_vertex(self, neighbours: NDArray[int] | List[int]):
+    def add_vertex(self, neighbours: NDArray[int] | List[int]) -> None:
         pass
 
-    def add_edge(self, start: int, end: int):
+    def add_edge(self, start: int, end: int) -> None:
         pass
 
-    def delete_vertex(self, vertex):
+    def delete_vertex(self, vertex) -> None:
         pass
 
-    def delete_edge(self, start, end):
+    def delete_edge(self, start, end) -> None:
         pass
 
-    def change_weight(self, start: int, end: int, new_weight: int):
+    def change_weight(self, start: int, end: int, new_weight: int) -> None:
         pass
 
-    def __lazy_update(self):
+    def __lazy_update(self) -> None:
         if not self.__modified:
             return
 
@@ -267,11 +272,11 @@ class Node:
         self.vertex = vertex
 
     @property
-    def x(self):
+    def x(self) -> int:
         return self.position[0]
 
     @property
-    def y(self):
+    def y(self) -> int:
         return self.position[1]
 
     def shift(self, offset: tuple[int, int]) -> tuple[int, int]:
@@ -300,23 +305,23 @@ class GraphView:
         self.__edges = list(map(lambda edge: (self.__nodes[edge[0]], self.__nodes[edge[1]]), self.__graph.edges))
 
     @property
-    def graph(self):
+    def graph(self) -> MutableGraph:
         return self.__graph
 
     @property
-    def nodes(self):
+    def nodes(self) -> dict[int, Node]:
         return self.__nodes
 
     @property
-    def edges(self):
+    def edges(self) -> list[tuple[Node, Node]]:
         return self.__edges
 
     @property
-    def canvas(self):
+    def canvas(self) -> tuple[int, int]:
         return self.__canvas
 
     @canvas.setter
-    def canvas(self, size: tuple[int, int]):
+    def canvas(self, size: tuple[int, int]) -> None:
         if min(size) > 0:
             self.__canvas = size
         else:
@@ -324,10 +329,22 @@ class GraphView:
 
     @classmethod
     def from_file(cls, filepath: str) -> 'GraphView':
-        return cls(Graph.from_file(filepath))
+        with open(filepath, 'rb') as file:
+            obj = pickle.load(file)
+
+        if isinstance(obj, cls):
+            return obj
+
+        if not isinstance(obj, Graph):
+            raise Exception('')
+
+        return cls(obj)
 
     def to_file(self, filepath: str) -> None:
         self.__graph.to_file(filepath)
+
+        with open(f'{filepath}_view', 'wb') as file:
+            pickle.dump(self, file, pickle.HIGHEST_PROTOCOL)
 
     @singledispatchmethod
     def neighbours(self, node: Node | int) -> List[Node | int]:
@@ -341,14 +358,14 @@ class GraphView:
     def _node_neighbours(self, vertex: int) -> List[Node]:
         return list(map(lambda vtx: self.__nodes[vtx], self.__graph.neighbours(vertex)))
 
-    def distribute(self, ideal_length: int):
+    def distribute(self, ideal_length: int) -> None:
         distribute_fruchterman_reingold(self, ideal_length, 0.9, 500, 1000)
 
-    def add_node(self, position):
+    def add_node(self, position) -> None:
         self.__graph.add_vertex([])
         number = len(self.__nodes)
         self.__nodes[number] = Node(number, position)
 
-    def add_edge(self, start, end):
+    def add_edge(self, start, end) -> None:
         self.__graph.add_edge(start, end)
         self.__edges.append((start, end))
