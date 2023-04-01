@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 def matrix_to_list(adjacency_matrix: NDArray, null_weight: int) -> NDArray:
     return np.array(
         [np.where(row != null_weight)[0] for row in adjacency_matrix],
-        dtype=object
+        #dtype=object
     )
 
 
