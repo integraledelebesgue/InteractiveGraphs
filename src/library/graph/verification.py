@@ -7,6 +7,11 @@ from numpy.typing import NDArray
 from src.library.graph.representations import list_to_matrix
 
 
+class ArgumentError(ValueError):
+    def __init__(self, message):
+        super().__init__(message)
+
+
 def verify_args(graph_constructor: Callable) -> Callable:
     @wraps(graph_constructor)
     def verifier(
@@ -18,23 +23,23 @@ def verify_args(graph_constructor: Callable) -> Callable:
             null_weight: int = 0
     ) -> object:
         if adj_list is None and adj_matrix is None:
-            raise AttributeError("At least one graph representation must be specified")
+            raise ArgumentError("At least one graph representation must be specified")
 
         if weighted and adj_matrix is None:
-            raise AttributeError("Weighted graph requires specifying an adjacency matrix")
+            raise ArgumentError("Weighted graph requires specifying an adjacency matrix")
 
         if adj_matrix is not None:
             if not directed and not np.all(np.abs(adj_matrix - adj_matrix.transpose()) == 0):
-                raise AttributeError("Undirected graph requires a symmetric adjacency matrix")
+                raise ArgumentError("Undirected graph requires a symmetric adjacency matrix")
             if not np.all(np.diag(adj_matrix) == null_weight):
-                raise AttributeError("Adjacency matrix with self-connected diagonal elements is not allowed")
+                raise ArgumentError("Adjacency matrix with self-connected diagonal elements is not allowed")
 
         if not weighted and adj_list is not None and adj_matrix is not None:
             if not np.array_equal(list_to_matrix(adj_list, null_weight), np.sign(adj_matrix)):
-                raise AttributeError("Both representations of undirected graph must contain identical graphs")
+                raise ArgumentError("Both representations of undirected graph must contain identical graphs")
 
         if null_weight not in {0, -1}:
-            raise AttributeError("A null-weight must be set to either 0 or -1")
+            raise ArgumentError("A null-weight must be set to either 0 or -1")
 
         return graph_constructor(
             self,
@@ -52,7 +57,7 @@ def directed_only(graph_func: Callable) -> Callable:
     @wraps(graph_func)
     def verifier(graph, *args, **kwargs):
         if not graph.directed:
-            raise AttributeError(f"Function {graph_func} cannot be performed on an undirected graph")
+            raise ArgumentError(f"Function {graph_func} cannot be performed on an undirected graph")
 
         return graph_func(graph, *args, **kwargs)
 
@@ -63,7 +68,7 @@ def undirected_only(graph_func: Callable) -> Callable:
     @wraps(graph_func)
     def verifier(graph, *args, **kwargs):
         if graph.directed:
-            raise AttributeError(f"Function {graph_func} cannot be performed on a directed graph")
+            raise ArgumentError(f"Function {graph_func} cannot be performed on a directed graph")
 
         return graph_func(graph, *args, **kwargs)
 
@@ -74,7 +79,7 @@ def weighted_only(graph_func: Callable) -> Callable:
     @wraps(graph_func)
     def verifier(graph, *args, **kwargs):
         if not graph.weighted:
-            raise AttributeError(f"Function {graph_func} cannot be performed on a non-weighted graph")
+            raise ArgumentError(f"Function {graph_func} cannot be performed on a non-weighted graph")
 
         return graph_func(graph, *args, **kwargs)
 
@@ -85,7 +90,7 @@ def positive_weights(graph_func: Callable) -> Callable:
     @wraps(graph_func)
     def verifier(graph, *args, **kwargs):
         if not np.all(graph.adj_matrix >= graph.null_weight):
-            raise AttributeError(f"Function {graph_func} cannot be performed on a graph with non-positive weights")
+            raise ArgumentError(f"Function {graph_func} cannot be performed on a graph with non-positive weights")
 
         return graph_func(graph, *args, **kwargs)
 
@@ -96,7 +101,7 @@ def zero_weight(graph_func: Callable) -> Callable:
     @wraps(graph_func)
     def verifier(graph, *args, **kwargs):
         if graph.null_weight == 0:
-            raise AttributeError(f"Function {graph_func} cannot be performed ona a graph with null-weight equal to 0")
+            raise ArgumentError(f"Function {graph_func} cannot be performed ona a graph with null-weight equal to 0")
 
         return graph_func(graph, *args, **kwargs)
 
