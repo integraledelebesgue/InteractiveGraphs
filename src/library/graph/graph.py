@@ -1,5 +1,10 @@
+import itertools
 import pickle
+import threading
+from collections import deque
+from dataclasses import dataclass
 from functools import cached_property, singledispatchmethod
+from time import sleep
 from typing import Optional, List, Union, Callable
 
 import numpy as np
@@ -7,16 +12,22 @@ from numpy.typing import NDArray
 
 from src.library.algorithms.drawing.fruchterman_reingolds import distribute_fruchterman_reingold
 from src.library.graph.representations import list_to_matrix, matrix_to_list
-from src.library.graph.verification import verify_args
+from src.library.graph.verification import verify_args, ArgumentError
 
 
 class Graph:
     """An immutable graph"""
 
+    _adj_list: Optional[list[NDArray]]
+    _adj_matrix: Optional[NDArray]
+    _weighted: bool
+    _directed: bool
+    _null_weight: int
+
     @verify_args
     def __init__(
             self, *,
-            adj_list: Optional[NDArray] = None,
+            adj_list: Optional[list[NDArray]] = None,
             adj_matrix: Optional[NDArray] = None,
             weighted: bool = False,
             directed: bool = False,
@@ -62,10 +73,9 @@ class Graph:
 
     @cached_property
     def order(self) -> int:
-        return (
-            self._adj_list if self._adj_list is not None
-            else self._adj_matrix
-        ).shape[0]
+        return len(self._adj_list)\
+            if self._adj_list is not None\
+            else self._adj_matrix.shape[0]
 
     @cached_property
     def size(self) -> int:
@@ -76,7 +86,7 @@ class Graph:
             return adj_matrix_flat[adj_matrix_flat != self._null_weight].size // (1 if self.directed else 2)
 
     @cached_property
-    def adj_list(self) -> NDArray:
+    def adj_list(self) -> list[NDArray]:
         if self._adj_list is None:
             self._adj_list = matrix_to_list(self._adj_matrix, self._null_weight)
 
@@ -136,7 +146,7 @@ class Graph:
             obj = pickle.load(file)
 
         if not isinstance(obj, cls):
-            raise Exception('')
+            raise Exception(f'Cannot read object from {filepath} - not a graph')
 
         return obj
 
@@ -146,6 +156,16 @@ class Graph:
 
 
 class MutableGraph(Graph):
+    _adj_list: list[NDArray]
+    _adj_matrix: NDArray
+    _weighted: bool
+    _directed: bool
+    _null_weight: int
+    __lazy_vertices: list[list[int]]
+    __lazy_edges: tuple[list[int], list[int]]
+    __lazy_weights: list[int]
+    __modified: bool
+
     def __init__(self, *args, **kwargs):
         match list(map(lambda arg: type(arg).__name__, args)):
             case ['Graph']:
@@ -154,9 +174,9 @@ class MutableGraph(Graph):
             case []:
                 super().__init__(*args, **kwargs)
             case _:
-                raise Exception("")
+                raise ArgumentError(f'Cannot construct mutable graph out of {list(map(type, args))}')
 
-        self.__lazy_vertices = [[] for _ in range(2 * self._adj_list.shape[0])]
+        self.__lazy_vertices = [[] for _ in range(2 * len(self._adj_list))]
         self.__lazy_edges = ([], [])
         self.__lazy_weights = []
 
@@ -176,7 +196,7 @@ class MutableGraph(Graph):
 
     @staticmethod
     def lazy(method: Callable) -> Callable:
-        def inner(self, *args, **kwargs):
+        def cacher(self, *args, **kwargs):
             name = f'__lazy_{method}'
 
             if not hasattr(self, name):
@@ -188,16 +208,16 @@ class MutableGraph(Graph):
 
             return getattr(self, name)
 
-        return inner
+        return cacher
 
     @property
     @lazy
     def order(self) -> int:
-        return self._adj_list.shape[0]
+        return len(self._adj_list)
 
     @property
     @lazy
-    def adj_list(self) -> NDArray:
+    def adj_list(self) -> list[NDArray]:
         return self._adj_list
 
     @property
@@ -226,7 +246,7 @@ class MutableGraph(Graph):
         return self._quick_dfs()
 
     @lazy
-    def neighbours(self, vertex: int) -> list[int]:
+    def neighbours(self, vertex: int) -> NDArray:
         return self._adj_list[vertex]
 
     def add_vertex(self, neighbours: NDArray[int] | List[int]) -> None:
@@ -250,23 +270,158 @@ class MutableGraph(Graph):
 
         self.__modified = False
 
-        added_vertices = len(list(filter(None, self.__lazy_vertices)))
+        new_vertices_count = len(list(filter(None, self.__lazy_vertices)))
 
-        if added_vertices > 0:
-            for adj_row, lazy_row in zip(self._adj_list, self.__lazy_vertices):
-                np.append(adj_row, lazy_row)
-                lazy_row.clear()
-
-            self._adj_matrix = np.pad(
-                self._adj_matrix,
-                (0, added_vertices),
-                'constant', constant_values=self._null_weight
-            )
+        if new_vertices_count > 0:
+            self.__update_adj_list()
+            self.__update_adj_matrix(new_vertices_count)
 
         self._adj_matrix[*self.__lazy_edges] = self.__lazy_weights
 
+    def __update_adj_matrix(self, new_vertices_count):
+        self._adj_matrix = np.pad(
+            self._adj_matrix,
+            (0, new_vertices_count),
+            'constant', constant_values=self._null_weight
+        )
+
+    def __update_adj_list(self):
+        for adj_row, lazy_row in zip(self._adj_list, self.__lazy_vertices):
+            np.append(adj_row, lazy_row)
+            lazy_row.clear()
+
+
+@dataclass
+class Frame:
+    queue: list | deque | NDArray
+    distance: Optional[NDArray]
+    colors: NDArray
+    special: bool = False
+
+
+class Animation(threading.Thread):
+    __frames: list[Frame]
+    __frames_seq: itertools.cycle
+    __frame: Frame
+    __delay: float
+    __special_delay: float
+    __colormap: dict[str, str]
+    __graph_view: 'GraphView'
+    __running: bool
+
+    def __init__(self, graph_view: 'GraphView'):
+        super().__init__()
+        self.__frames = []
+        self.running = False
+        self.__graph_view = graph_view
+        self.__delay = 0.5
+        self.__special_delay = 2.0
+        self.__colormap = {
+            'default': '#9b8bb3',
+            'current': '#f3764f',
+            'awaiting': '#8bb162',
+            'visited': '#ad60ba'
+        }
+
+    @property
+    def frame(self):
+        return self.__frame
+
+    def run(self):
+        self.reset()
+        self.__running = True
+
+        while self.__running:
+            self.__graph_view.color_nodes(self.__frame.colors)
+            self.__graph_view.label_nodes(self.__frame.distance)
+            sleep(
+                self.__delay
+                if not self.__frame.special
+                else self.__special_delay
+            )
+            self.__frame = self.__frames_seq.__next__()
+
+    def set_delay(self, value: float) -> 'Animation':
+        self.__delay = value
+        return self
+
+    def set_special_delay(self, value: float) -> 'Animation':
+        self.__special_delay = value
+        return self
+
+    def set_colors(
+            self,
+            default: str,
+            current: str,
+            awaiting: str,
+            visited: str
+    ) -> 'Animation':
+        self.__colormap = {
+            'default': default,
+            'current': current,
+            'awaiting': awaiting,
+            'visited': visited
+        }
+        return self
+
+    def add_frame(
+            self,
+            curr: Optional[int],
+            queue: Optional[list | deque | NDArray],
+            visited: Optional[NDArray],
+            distance: Optional[NDArray],
+            special: bool = False
+    ) -> 'Animation':
+        colors = self.map_to_colors(curr, queue, visited)
+        self.__frames.append(
+            Frame(
+                queue,
+                distance,
+                colors,
+                special
+            )
+        )
+        return self
+
+    def map_to_colors(
+            self,
+            curr:
+            Optional[int],
+            queue: Optional[list | deque | NDArray],
+            visited: Optional[NDArray]
+    ) -> NDArray:
+        colors = np.fromiter(
+            map(
+                lambda _: self.__colormap['default'],
+                self.__graph_view.nodes
+            ),
+            dtype=object
+        )
+
+        if visited is not None:
+            colors[visited] = self.__colormap['visited']
+        if queue is not None:
+            colors[queue] = self.__colormap['awaiting']
+        if curr is not None:
+            colors[curr] = self.__colormap['current']
+
+        return colors
+
+    def reset(self) -> 'Animation':
+        self.__frame = self.__frames[0]
+        self.__frames_seq = itertools.cycle(self.__frames)
+        return self
+
+    def stop(self):
+        self.__running = False
+
 
 class Node:
+    position: NDArray
+    vertex: int
+    color: str
+    label: str
+
     def __init__(self, vertex, position: tuple[int, int] | None = None):
         self.position = np.array(position)
         self.vertex = vertex
@@ -284,14 +439,17 @@ class Node:
 
 
 class GraphView:
+    __graph: MutableGraph
+    __nodes: dict[int, Node]
+    __edges: list[tuple[Node, Node]]
 
     def __init__(self, graph: Graph | MutableGraph, canvas_size: Optional[tuple[int, int]] = None):
         self.__graph = graph\
             if isinstance(graph, MutableGraph)\
             else graph.as_mutable()
 
-        self.__canvas = canvas_size \
-            if canvas_size is not None \
+        self.__canvas = canvas_size\
+            if canvas_size is not None\
             else (1000, 1000)
 
         self.__nodes = dict(zip(
@@ -369,3 +527,11 @@ class GraphView:
     def add_edge(self, start, end) -> None:
         self.__graph.add_edge(start, end)
         self.__edges.append((start, end))
+
+    def color_nodes(self, colors: NDArray) -> None:
+        for vertex, node in self.__nodes.items():
+            node.color = colors[vertex]
+
+    def label_nodes(self, labels: NDArray) -> None:
+        for vertex, node in self.__nodes.items():
+            node.label = str(labels[vertex])

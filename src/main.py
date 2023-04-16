@@ -1,33 +1,29 @@
+import threading
+from collections import deque
+
 import matplotlib.pyplot as plt
 import numpy as np
 
+from src.library.algorithms.traversals.bfs import bfs
 from src.library.graph.graph import Graph
 
 graph = Graph(
     adj_matrix=np.array([
-        [-1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, -1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 1, -1, 1, 1, 1, 1, 1, 1],
-        [1, 1, 1, -1, 1, 1, 1, 1, 1],
-        [1, 1, 1, 1, -1, 1, 1, 1, 1],
-        [1, 1, 1, 1, 1, -1, 1, 1, 1],
-        [1, 1, 1, 1, 1, 1, -1, 1, 1],
-        [1, 1, 1, 1, 1, 1, 1, -1, 1],
-        [1, 1, 1, 1, 1, 1, 1, 1, -1],
+        [-1, 1, -1, 1, 1],
+        [-1, -1, 1, 1, 1],
+        [-1, 1, -1, 1, 1],
+        [1, 1, -1, -1, 1],
+        [-1, -1, -1, 1, -1]
     ]),
-    weighted=True,
+    weighted=False,
+    directed=True,
     null_weight=-1
 )
 
-graph_view = graph.view()
+mut_graph = graph.as_mutable()
+hist = deque()
 
-positions = list(map(lambda node: node.position, graph_view.nodes.values()))
+distance, tree = bfs(graph, 0, hist)
 
-plt.scatter([x[0] for x in positions], [x[1] for x in positions])
-
-graph_view.distribute(200)
-
-positions = list(map(lambda node: node.position, graph_view.nodes.values()))
-
-plt.scatter([x[0] for x in positions], [x[1] for x in positions])
-plt.show()
+print(distance, tree)
+print(*hist, sep='\n')

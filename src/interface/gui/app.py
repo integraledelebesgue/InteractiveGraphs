@@ -7,7 +7,8 @@ import numpy as np
 import pygame
 import pygame_gui
 
-from src.library.graph.graph import Graph, GraphView
+from src.library.algorithms.traversals.bfs import bfs
+from src.library.graph.graph import Graph, GraphView, Animation
 
 window_size = (1600, 1200)
 
@@ -62,7 +63,7 @@ class App(threading.Thread):
         pygame.init()
         pygame.display.set_caption('Interactive graphs')
 
-        self.window_surface = pygame.display \
+        self.window_surface = pygame.display\
             .set_mode(
                 window_size,
                 pygame.RESIZABLE
@@ -89,6 +90,14 @@ class App(threading.Thread):
         )
 
         self.graph_view = test_graph.view(self.graph_area_size)
+        self.active_animation = Animation(self.graph_view)
+
+        bfs(self.graph_view.graph, 0, self.active_animation)
+
+        self.active_animation\
+            .set_delay(1.0)\
+            .set_special_delay(5.0)\
+            .start()
 
         self.draggable = []
         self.dragging_allowed = True
@@ -113,7 +122,7 @@ class App(threading.Thread):
                 self.load_io.input_box.visible = True
                 self.load_io.active = True
 
-        _load_graph = pygame_gui.elements \
+        _load_graph = pygame_gui.elements\
             .UIButton(
                 relative_rect=pygame.Rect((self.left_margin, self.top_margin), (100, 50)),
                 text='Load',
@@ -137,7 +146,7 @@ class App(threading.Thread):
                 self.save_io.input_box.visible = True
                 self.save_io.active = True
 
-        _save_graph = pygame_gui.elements \
+        _save_graph = pygame_gui.elements\
             .UIButton(
                 relative_rect=pygame.Rect((self.left_margin, self.top_margin + 65), (100, 50)),
                 text='Save',
@@ -204,68 +213,57 @@ class App(threading.Thread):
 
                     # UI Button handling
 
-                    case pygame_gui.UI_BUTTON_PRESSED \
+                    case pygame_gui.UI_BUTTON_PRESSED\
                             if hasattr(event.ui_element, 'handler'):
                         event.ui_element.handler(event)
 
                     # File I/O
 
-                    case pygame.KEYDOWN \
-                        if event.key == pygame.K_RETURN \
+                    case pygame.KEYDOWN\
+                        if event.key == pygame.K_RETURN\
                             and self.load_io.active:
 
-                        self.load_io.active = False
-                        self.load_io.input_box.visible = False
-                        self.load_graph(self.load_io.input_box.get_text())
+                        self.handle_load_return()
 
-                    case pygame.KEYDOWN \
-                        if event.key == pygame.K_RETURN \
+                    case pygame.KEYDOWN\
+                        if event.key == pygame.K_RETURN\
                            and self.save_io.active:
 
-                        self.save_io.active = False
-                        self.save_io.input_box.visible = False
-                        self.save_graph(self.save_io.input_box.get_text())
+                        self.handle_save_return()
 
                     # Node dragging
 
-                    case pygame.MOUSEBUTTONDOWN \
-                        if event.button == 1 \
-                            and self.dragging_allowed \
+                    case pygame.MOUSEBUTTONDOWN\
+                        if event.button == 1\
+                            and self.dragging_allowed\
                             and (element := self.draggable_collision(event.pos)):
 
-                        self.mouse_attached = element
+                        self.attach_to_mouse(element, event)
 
-                        mouse_x, mouse_y = event.pos
-                        self.mouse_element_offset = Position(
-                            element.x - mouse_x,
-                            element.y - mouse_y
-                        )
-
-                    case pygame.MOUSEBUTTONUP \
+                    case pygame.MOUSEBUTTONUP\
                             if self.mouse_attached and event.button == 1:
                         self.mouse_attached = None
 
                     case pygame.MOUSEMOTION if (element := self.mouse_attached):
-                        mouse_x, mouse_y = event.pos
-                        element.x = mouse_x + self.mouse_element_offset.x
-                        element.y = mouse_y + self.mouse_element_offset.y
+                        self.follow_mouse(element, event)
 
                     case pygame.MOUSEMOTION:
                         self.mouse_x, self.mouse_y = event.pos
 
                     # Context menu
 
-                    case pygame.MOUSEBUTTONDOWN \
-                        if event.button == 3 \
+                    case pygame.MOUSEBUTTONDOWN\
+                        if event.button == 3\
                             and not self.context_menu.active\
-                            and self.graph_area.collidepoint(event.pos) \
+                            and self.graph_area.collidepoint(event.pos)\
                             and not self.node_collision(event.pos):
 
                         self.open_context_menu(event.pos)
                         self.context_menu.active = True
 
-                    case pygame.MOUSEBUTTONDOWN \
-                            if self.context_menu.active:
+                    case pygame.MOUSEBUTTONDOWN\
+                        if self.context_menu.active:
+
                         self.close_context_menu()
                         self.context_menu.active = False
 
@@ -280,10 +278,32 @@ class App(threading.Thread):
 
         self.quit()
 
-    @staticmethod
-    def quit() -> None:
+    def follow_mouse(self, element, event):
+        mouse_x, mouse_y = event.pos
+        element.x = mouse_x + self.mouse_element_offset.x
+        element.y = mouse_y + self.mouse_element_offset.y
+
+    def attach_to_mouse(self, element, event):
+        self.mouse_attached = element
+        mouse_x, mouse_y = event.pos
+        self.mouse_element_offset = Position(
+            element.x - mouse_x,
+            element.y - mouse_y
+        )
+
+    def handle_save_return(self):
+        self.save_io.active = False
+        self.save_io.input_box.visible = False
+        self.save_graph(self.save_io.input_box.get_text())
+
+    def handle_load_return(self):
+        self.load_io.active = False
+        self.load_io.input_box.visible = False
+        self.load_graph(self.load_io.input_box.get_text())
+
+    def quit(self) -> None:
+        self.active_animation.stop()
         pygame.quit()
-        quit()
 
     def open_context_menu(self, position) -> None:
         self.context_menu.container.set_position(position)
@@ -305,25 +325,22 @@ class App(threading.Thread):
             return False
 
     def draw_graph(self) -> None:
+        self.draw_background()
+        self.draw_edges()
+        self.draw_nodes()
+
+    def draw_background(self):
         pygame.draw.rect(
             self.window_surface,
             '#f5f5f0',
             self.graph_area
         )
 
-        for start, end in self.graph_view.edges:
-            pygame.draw.line(
-                self.window_surface,
-                '#000000',
-                start.shift(self.graph_area_corner),
-                end.shift(self.graph_area_corner),
-                4
-            )
-
+    def draw_nodes(self):
         for node in self.graph_view.nodes.values():
             pygame.draw.circle(
                 self.window_surface,
-                '#0086b3',
+                node.color,
                 node.shift(self.graph_area_corner),
                 15
             )
@@ -336,6 +353,16 @@ class App(threading.Thread):
                 3
             )
 
+    def draw_edges(self):
+        for start, end in self.graph_view.edges:
+            pygame.draw.line(
+                self.window_surface,
+                '#000000',
+                start.shift(self.graph_area_corner),
+                end.shift(self.graph_area_corner),
+                4
+            )
+
     def load_graph(self, filepath: str) -> None:
         self.graph_view = GraphView.from_file(filepath)
 
@@ -345,5 +372,6 @@ class App(threading.Thread):
 
 if __name__ == '__main__':
     app = App()
-    app.run()
+    app.start()
     app.join()
+    print('Shutting down')
