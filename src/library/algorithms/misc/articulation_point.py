@@ -21,7 +21,7 @@ def dfs(vertex: int, graph: Graph, visit: np.array, visit_time: np.array, low: n
 
 @connected
 @undirected_only
-def bridge(graph: Graph) -> list[tuple[int, int]]:
+def articulation_point(graph: Graph) -> list[int]:
 
     n = graph.order
     visit = np.full(n, False, bool)
@@ -32,9 +32,15 @@ def bridge(graph: Graph) -> list[tuple[int, int]]:
     visit_time[0] = 0
     dfs(0, graph, visit, visit_time, low, parent)
 
-    bridges = []
+    articulation_points = []
+    if len([child for child in graph.neighbours(0) if parent[child] == 0]) > 1:
+        articulation_points.append(0)
+
     for vertex in range(1, n):
-        if low[vertex] == visit_time[vertex]:
-            bridges.append((vertex, parent[vertex]))
-    return bridges
+        for child in filter(lambda neighbor: parent[neighbor] == vertex, graph.neighbours(vertex)):
+            if low[child] >= visit_time[vertex]:
+                articulation_points.append(vertex)
+                break
+
+    return articulation_points
 
