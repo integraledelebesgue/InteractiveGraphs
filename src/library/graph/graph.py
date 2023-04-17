@@ -1,8 +1,9 @@
 import itertools
 import pickle
+import re
 import threading
 from collections import deque
-from dataclasses import dataclass
+from copy import deepcopy
 from functools import cached_property, singledispatchmethod
 from time import sleep
 from typing import Optional, List, Union, Callable
@@ -112,15 +113,15 @@ class Graph:
             )
         )
 
-    @cached_property
-    def connected(self) -> bool:
-        return self._quick_dfs()
-
     def neighbours(self, vertex: int) -> NDArray:
         if self._adj_list is not None:
             return self._adj_list[vertex]
         if self._adj_matrix is not None:
             return np.where(self._adj_matrix[vertex] != self._null_weight)[0]
+
+    @cached_property
+    def connected(self) -> bool:
+        return self._quick_dfs()
 
     def _quick_dfs(self) -> bool:
         visited = np.zeros(self.order, bool)
@@ -167,32 +168,26 @@ class MutableGraph(Graph):
     __modified: bool
 
     def __init__(self, *args, **kwargs):
-        match list(map(lambda arg: type(arg).__name__, args)):
-            case ['Graph']:
-                self.__init_from_graph(args[0])
-                self.__connected = args[0].connected
+        match args:
+            case [graph] if isinstance(graph, Graph):
+                self.__init_from_graph(graph)
             case []:
-                super().__init__(*args, **kwargs)
+                super().__init__(**kwargs)
+                self.__init_from_graph(super())
             case _:
-                raise ArgumentError(f'Cannot construct mutable graph out of {list(map(type, args))}')
+                raise ArgumentError(f'No constructor matching arguments {list(map(type, args))}')
 
         self.__lazy_vertices = [[] for _ in range(2 * len(self._adj_list))]
         self.__lazy_edges = ([], [])
         self.__lazy_weights = []
-
         self.__modified = False
 
     def __init_from_graph(self, graph: Graph) -> None:
-        _force_computation = graph.adj_matrix, graph.adj_list, graph.order, graph.size, graph.connected
-
-        for name, value in filter(
-                lambda item: item[0].startswith("_"),
-                map(
-                    lambda item: (item[0].removeprefix(f"_{graph.__class__}"), item[1]),
-                    graph.__dict__.items()
-                )
-        ):
-            self.__setattr__(name, value)
+        self._adj_list = deepcopy(graph.adj_list)
+        self._adj_matrix = graph.adj_matrix.copy()
+        self._weighted = graph.weighted
+        self._directed = graph.directed
+        self._null_weight = graph.null_weight
 
     @staticmethod
     def lazy(method: Callable) -> Callable:
@@ -245,7 +240,6 @@ class MutableGraph(Graph):
     def connected(self) -> bool:
         return self._quick_dfs()
 
-    @lazy
     def neighbours(self, vertex: int) -> NDArray:
         return self._adj_list[vertex]
 
@@ -291,12 +285,22 @@ class MutableGraph(Graph):
             lazy_row.clear()
 
 
-@dataclass
 class Frame:
-    queue: list | deque | NDArray
+    queue: Union[list, deque, NDArray]
     distance: Optional[NDArray]
     colors: NDArray
     special: bool = False
+
+    def __init__(
+            self, queue: Union[list, deque, NDArray],
+            distance: Optional[NDArray],
+            colors: NDArray,
+            special: bool = False
+    ):
+        self.queue = queue.copy()
+        self.distance = distance.copy()
+        self.colors = colors
+        self.special = special
 
 
 class Animation(threading.Thread):
@@ -317,10 +321,10 @@ class Animation(threading.Thread):
         self.__delay = 0.5
         self.__special_delay = 2.0
         self.__colormap = {
-            'default': '#9b8bb3',
+            'default': '#bdbdbd',
             'current': '#f3764f',
-            'awaiting': '#8bb162',
-            'visited': '#ad60ba'
+            'awaiting': '#ad60ba',
+            'visited': '#8bb162'
         }
 
     @property
@@ -356,6 +360,11 @@ class Animation(threading.Thread):
             awaiting: str,
             visited: str
     ) -> 'Animation':
+        self.validate_color(default)
+        self.validate_color(current)
+        self.validate_color(awaiting)
+        self.validate_color(visited)
+
         self.__colormap = {
             'default': default,
             'current': current,
@@ -363,6 +372,11 @@ class Animation(threading.Thread):
             'visited': visited
         }
         return self
+
+    @staticmethod
+    def validate_color(color: str) -> None:
+        if re.match('^#[a-f0-9]{6}$', color) is None:
+            raise ArgumentError(f'Color code {color} is invalid')
 
     def add_frame(
             self,
