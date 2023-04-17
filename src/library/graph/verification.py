@@ -106,3 +106,13 @@ def zero_weight(graph_func: Callable) -> Callable:
         return graph_func(graph, *args, **kwargs)
 
     return verifier
+
+
+def connected(graph_func: Callable) -> Callable:
+    @wraps(graph_func)
+    def verifier(graph, *args, **kwargs):
+        if not graph.connected:
+            raise ArgumentError(f"Function {graph_func} cannot be performed on a disconnected graph")
+        return graph_func(graph, *args, **kwargs)
+
+    return verifier
