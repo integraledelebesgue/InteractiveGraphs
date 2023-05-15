@@ -226,10 +226,7 @@ class MutableGraph(Graph):
         return np.fromiter(
             zip(
                 *np.where(
-                    (self._adj_matrix
-                     if self._directed
-                     else np.triu(self._adj_matrix, 0))
-                    != self._null_weight
+                    (self._adj_matrix != self._null_weight)
                 )
             ),
             dtype=object
