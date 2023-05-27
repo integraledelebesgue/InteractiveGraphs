@@ -1,40 +1,60 @@
+from typing import Tuple, Optional
+
+import numba
 import numpy as np
 from numpy.typing import NDArray
 from collections import deque
 
-from src.library.graph.graph import Graph
+from src.library.graph.graph import Graph, TrackerCategory, Tracker
 from src.library.graph.verification import weighted_only, zero_weight
 
 
+@numba.jit
 @weighted_only
 @zero_weight
-def binary_bfs(graph: Graph, start: int) -> tuple[NDArray, NDArray, NDArray]:
-    """A 0-1-BFS algorithm. Uses 0 and 1 as edge weights and -1 for non-existing edges"""
-
-    distance = np.zeros(graph.order, int).fill(-1)
+def binary_bfs(
+        graph: Graph,
+        start: int = 0,
+        tracker: Optional[Tracker] = None
+) -> Tuple[NDArray, NDArray]:
     visited = np.zeros(graph.order, bool)
-    visit_order = []
+    visited[start] = True
+
+    distance = np.full(graph.order, -1)
+    distance[start] = 0
+
+    traversal_tree = np.full(graph.order, -1)
+
     queue = deque([start])
 
-    weights = graph.adj_matrix
+    curr = None
+
+    if tracker is not None:
+        tracker.add(queue, TrackerCategory.QUEUE)
+        tracker.add(distance, TrackerCategory.DISTANCE)
+        tracker.add(traversal_tree, TrackerCategory.TREE)
+        tracker.add(curr, TrackerCategory.CURRENT)
 
     while len(queue) > 0:
         curr = queue.popleft()
 
-        if visited[curr]:
-            continue
-
-        visited[curr] = True
-        visit_order.append(curr)
+        if tracker is not None:
+            tracker.update()
 
         neighbours = graph.neighbours(curr)
+        neighbours = neighbours[visited[neighbours] == False]
+        visited[neighbours] = True
 
-        distance[neighbours] = distance[curr] + weights[curr, neighbours]
+        neighbour_distances = graph.adj_matrix[curr, neighbours]
 
-        cheap = neighbours[weights[curr, neighbours] == 0]
-        expensive = neighbours[weights[curr, neighbours] == 1]
+        distance[neighbours] = distance[curr] + neighbour_distances
 
-        queue.extendleft(cheap)
-        queue.extend(expensive)
+        traversal_tree[neighbours] = curr
 
-    return distance, visited, np.array(visit_order)
+        queue.extendleft(neighbours[neighbour_distances[neighbours] == 0])
+        queue.extend(neighbours[neighbour_distances[neighbours] == 1])
+
+    if tracker is not None:
+        tracker.update()
+
+    return distance, traversal_tree
