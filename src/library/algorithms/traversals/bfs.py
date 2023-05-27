@@ -2,41 +2,44 @@ from collections import deque
 from typing import Tuple, Optional
 
 import numpy as np
-from numpy.typing import NDArray
+import numba
 
-from src.library.graph.graph import Graph, Animation
+from src.library.graph.graph import Graph, Tracker, TrackerCategory
 
 
+@numba.jit(nopython=False, forceobj=True)
 def bfs(
         graph: Graph,
         start: int = 0,
-        animation: Optional[Animation] = None
-) -> Tuple[NDArray, NDArray]:
+        tracker: Optional[Tracker] = None
+) -> Tuple[np.ndarray[int], np.ndarray[int]]:
     visited = np.zeros(graph.order, bool)
-    traversal_tree = np.full(graph.order, -1)
+    visited[start] = True
+
     distance = np.full(graph.order, -1)
     distance[start] = 0
 
-    queue = deque([start])
+    traversal_tree = np.full(graph.order, -1)
+
+    queue: deque[int] = deque([start])
+
+    curr = None
+
+    if tracker is not None:
+        tracker.add(queue, TrackerCategory.QUEUE)
+        tracker.add(distance, TrackerCategory.DISTANCE)
+        tracker.add(traversal_tree, TrackerCategory.TREE)
+        tracker.add(curr, TrackerCategory.CURRENT)
 
     while len(queue) > 0:
         curr = queue.popleft()
 
-        if visited[curr]:
-            continue
-        visited[curr] = True
-
-        if animation is not None:
-            animation.add_frame(
-                curr,
-                queue,
-                visited,
-                distance
-            )
+        if tracker is not None:
+            tracker.update()
 
         neighbours = graph.neighbours(curr)
         neighbours = neighbours[visited[neighbours] == False]
-
+        visited[neighbours] = True
         distance[neighbours] = distance[curr] + \
            graph.adj_matrix[curr, neighbours] if graph.weighted\
             else 1
@@ -45,13 +48,7 @@ def bfs(
 
         queue.extend(neighbours)
 
-    if animation is not None:
-        animation.add_frame(
-            None,
-            queue,
-            visited,
-            distance,
-            special=True
-        )
+    if tracker is not None:
+        tracker.update()
 
     return distance, traversal_tree
