@@ -1,14 +1,22 @@
+from typing import Optional
+
 import numpy as np
 from numpy.typing import NDArray
 
 from copy import deepcopy
 from src.library.graph.verification import connected, positive_weights
-from src.library.graph.graph import Graph
+from src.library.graph.graph import Graph, Tracker
 
 from collections import deque
 
 
-def bfs(graph: list[list[int]], source: int, sink: int, residual_network: NDArray, parent: np.array):
+def __bfs(
+        graph: list[list[int]],
+        source: int,
+        sink: int,
+        residual_network: np.ndarray[int],
+        parent: np.ndarray[int]
+) -> int:
     n = len(graph)
     visit = np.full(n, False, bool)
 
@@ -31,7 +39,13 @@ def bfs(graph: list[list[int]], source: int, sink: int, residual_network: NDArra
     return 0
 
 
-def update_residual_network(source: int, sink: int, parent: np.array, residual_network: NDArray, change: int):
+def update_residual_network(
+        source: int,
+        sink: int,
+        parent: np.ndarray[int],
+        residual_network: np.ndarray[int],
+        change: int
+) -> None:
     vertex = sink
     while vertex != source:
         residual_network[vertex, parent[vertex]] += change
@@ -41,11 +55,16 @@ def update_residual_network(source: int, sink: int, parent: np.array, residual_n
 
 @connected
 @positive_weights
-def edmonds_karp(graph: Graph, source: int, sink: int) -> tuple[int, NDArray]:
+def edmonds_karp(
+        graph: Graph,
+        source: int,
+        sink: int,
+        tracker: Optional[Tracker] = None
+) -> tuple[int, np.ndarray[int]]:
     residual_network = deepcopy(graph.adj_matrix)
     graph_bfs = [
         list(filter(
-            lambda neighbor: graph.adj_matrix[vertex, neighbor] != graph.null_weight or\
+            lambda neighbor: graph.adj_matrix[vertex, neighbor] != graph.null_weight or \
                              graph.adj_matrix[neighbor, vertex] != graph.null_weight,
             range(graph.order)
         ))
@@ -55,7 +74,7 @@ def edmonds_karp(graph: Graph, source: int, sink: int) -> tuple[int, NDArray]:
     parent = np.full(graph.order, -1, int)
 
     flow = 0
-    while (flow_increase := bfs(graph_bfs, source, sink, residual_network, parent)) > 0:
+    while (flow_increase := __bfs(graph_bfs, source, sink, residual_network, parent)) > 0:
         update_residual_network(source, sink, parent, residual_network, flow_increase)
         flow += flow_increase
         parent = np.full(graph.order, -1, int)
