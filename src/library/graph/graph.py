@@ -1,26 +1,39 @@
+import dataclasses
 import itertools
 import pickle
 import re
 import threading
-from collections import deque
 from copy import deepcopy
+from enum import Enum
 from functools import cached_property, singledispatchmethod
 from time import sleep
-from typing import Optional, List, Union, Callable
+from typing import Optional, Union, Callable, Any, Iterable, Iterator, List
 
 import numpy as np
+from numba.core.typing.asnumbatype import as_numba_type
+from numba.experimental import jitclass
 from numpy.typing import NDArray
 
 from src.library.algorithms.drawing.fruchterman_reingolds import distribute_fruchterman_reingold
 from src.library.graph.representations import list_to_matrix, matrix_to_list
 from src.library.graph.verification import verify_args, ArgumentError
 
+"""
+graph_field_types = [
+    ('_adj_list', as_numba_type(Optional[list[NDArray[int]]])),
+    ('_adj_matrix', as_numba_type(Optional[NDArray[int]])),
+    ('_weighted', as_numba_type(bool)),
+    ('_directed', as_numba_type(bool)),
+    ('_null_weight', as_numba_type(int))
+]
+"""
+
 
 class Graph:
     """An immutable graph"""
 
-    _adj_list: Optional[list[NDArray]]
-    _adj_matrix: Optional[NDArray]
+    _adj_list: Optional[list[np.ndarray[int]]]
+    _adj_matrix: Optional[np.ndarray[int]]
     _weighted: bool
     _directed: bool
     _null_weight: int
@@ -28,8 +41,8 @@ class Graph:
     @verify_args
     def __init__(
             self, *,
-            adj_list: Optional[list[NDArray]] = None,
-            adj_matrix: Optional[NDArray] = None,
+            adj_list: Optional[list[np.ndarray[int]]] = None,
+            adj_matrix: Optional[np.ndarray[int]] = None,
             weighted: bool = False,
             directed: bool = False,
             null_weight: int = 0
@@ -54,11 +67,17 @@ class Graph:
             Returns: A graph object
         """
 
+        self.__numba_dummy_typing()
+
         self._adj_list = adj_list
         self._adj_matrix = adj_matrix
         self._weighted = weighted
         self._directed = directed
         self._null_weight = null_weight
+
+    def __numba_dummy_typing(self):
+        self._adj_list = [np.array([1, 2, 3], dtype=int)]
+        self._adj_matrix = None
 
     @property
     def weighted(self) -> bool:
@@ -74,8 +93,8 @@ class Graph:
 
     @cached_property
     def order(self) -> int:
-        return len(self._adj_list)\
-            if self._adj_list is not None\
+        return len(self._adj_list) \
+            if self._adj_list is not None \
             else self._adj_matrix.shape[0]
 
     @cached_property
@@ -87,22 +106,22 @@ class Graph:
             return adj_matrix_flat[adj_matrix_flat != self._null_weight].size // (1 if self.directed else 2)
 
     @cached_property
-    def adj_list(self) -> list[NDArray]:
+    def adj_list(self) -> list[np.ndarray[int]]:
         if self._adj_list is None:
             self._adj_list = matrix_to_list(self._adj_matrix, self._null_weight)
 
         return self._adj_list
 
     @cached_property
-    def adj_matrix(self) -> NDArray:
+    def adj_matrix(self) -> np.ndarray[int]:
         if self._adj_matrix is None:
             self._adj_matrix = list_to_matrix(self._adj_list, self._null_weight)
 
         return self._adj_matrix
 
     @cached_property
-    def edges(self) -> NDArray:
-        return np.array(
+    def edges(self) -> np.ndarray[tuple[int, int]]:
+        return np.fromiter(
             zip(
                 *np.where(
                     (self._adj_matrix
@@ -110,10 +129,11 @@ class Graph:
                      else np.triu(self._adj_matrix, 0))
                     != self._null_weight
                 )
-            )
+            ),
+            dtype=object
         )
 
-    def neighbours(self, vertex: int) -> NDArray:
+    def neighbours(self, vertex: int) -> np.ndarray[int]:
         if self._adj_list is not None:
             return self._adj_list[vertex]
         if self._adj_matrix is not None:
@@ -157,8 +177,8 @@ class Graph:
 
 
 class MutableGraph(Graph):
-    _adj_list: list[NDArray]
-    _adj_matrix: NDArray
+    _adj_list: list[np.ndarray[int]]
+    _adj_matrix: np.ndarray[int]
     _weighted: bool
     _directed: bool
     _null_weight: int
@@ -212,17 +232,17 @@ class MutableGraph(Graph):
 
     @property
     @lazy
-    def adj_list(self) -> list[NDArray]:
+    def adj_list(self) -> list[np.ndarray[int]]:
         return self._adj_list
 
     @property
     @lazy
-    def adj_matrix(self) -> NDArray:
+    def adj_matrix(self) -> np.ndarray[int]:
         return self._adj_matrix
 
     @property
     @lazy
-    def edges(self) -> NDArray:
+    def edges(self) -> np.ndarray[int]:
         return np.fromiter(
             zip(
                 *np.where(
@@ -237,10 +257,10 @@ class MutableGraph(Graph):
     def connected(self) -> bool:
         return self._quick_dfs()
 
-    def neighbours(self, vertex: int) -> NDArray:
+    def neighbours(self, vertex: int) -> np.ndarray[int]:
         return self._adj_list[vertex]
 
-    def add_vertex(self, neighbours: NDArray[int] | List[int]) -> None:
+    def add_vertex(self, neighbours: np.ndarray[int] | list[int]) -> None:
         pass
 
     def add_edge(self, start: int, end: int) -> None:
@@ -282,153 +302,252 @@ class MutableGraph(Graph):
             lazy_row.clear()
 
 
-class Frame:
-    queue: Union[list, deque, NDArray]
-    distance: Optional[NDArray]
-    colors: NDArray
-    special: bool = False
-
-    def __init__(
-            self, queue: Union[list, deque, NDArray],
-            distance: Optional[NDArray],
-            colors: NDArray,
-            special: bool = False
-    ):
-        self.queue = queue.copy()
-        self.distance = distance.copy()
-        self.colors = colors
-        self.special = special
+class TrackerCategory(Enum):
+    QUEUE = 1
+    STACK = 2
+    TREE = 3
+    EDGE_LIST = 4
+    VISITED = 5
+    DISTANCE = 6
+    CURRENT = 7
 
 
-class Animation(threading.Thread):
-    __frames: list[Frame]
-    __frames_seq: itertools.cycle
-    __frame: Frame
-    __delay: float
-    __special_delay: float
-    __colormap: dict[str, str]
-    __graph_view: 'GraphView'
-    __running: bool
+@dataclasses.dataclass
+class Tracker:
+    __tracked: list[tuple[TrackerCategory, Any, list[Any]]] = dataclasses.field(default_factory=list)
 
-    def __init__(self, graph_view: 'GraphView'):
-        super().__init__()
-        self.__frames = []
-        self.running = False
-        self.__graph_view = graph_view
-        self.__delay = 0.5
-        self.__special_delay = 2.0
-        self.__colormap = {
-            'default': '#bdbdbd',
-            'current': '#f3764f',
-            'awaiting': '#ad60ba',
-            'visited': '#8bb162'
-        }
+    def add(self, item: Any, category: TrackerCategory):
+        self.__tracked.append((category, item, list()))
+
+    def update(self):
+        for category, item, history in self.__tracked:
+            history.append(
+                item.copy()
+                if category != TrackerCategory.CURRENT
+                else item
+            )
+
+    def as_animation_of(self, graph_view: 'GraphView') -> 'Animation':
+        return Animation(graph_view, self)
 
     @property
-    def frame(self):
-        return self.__frame
+    def tracked(self) -> list[tuple[TrackerCategory, list[Any]]]:
+        return [(category, history) for category, _, history in self.__tracked]
 
-    def run(self):
-        self.reset()
-        self.__running = True
 
-        while self.__running:
-            self.__graph_view.color_nodes(self.__frame.colors)
-            self.__graph_view.label_nodes(self.__frame.distance)
-            sleep(
-                self.__delay
-                if not self.__frame.special
-                else self.__special_delay
-            )
-            self.__frame = self.__frames_seq.__next__()
+"""
+TODO: Rename GraphFrame and GraphAnimation after their implementation is complete,
+delete old Animation and Frame.
+"""
 
-    def set_delay(self, value: float) -> 'Animation':
-        self.__delay = value
-        return self
 
-    def set_special_delay(self, value: float) -> 'Animation':
-        self.__special_delay = value
-        return self
+@dataclasses.dataclass
+class Frame:
+    node_colors: dict[int, str]
+    node_labels: dict[int, str]
+    edge_colors: dict[tuple[int, int], str]
 
-    def set_colors(
-            self,
-            default: str,
-            current: str,
-            awaiting: str,
-            visited: str
-    ) -> 'Animation':
-        self.validate_color(default)
-        self.validate_color(current)
-        self.validate_color(awaiting)
-        self.validate_color(visited)
 
-        self.__colormap = {
-            'default': default,
-            'current': current,
-            'awaiting': awaiting,
-            'visited': visited
-        }
-        return self
+class ElementCategory(Enum):
+    DEFAULT_NODE = 0
+    VISITED_NODE = 1
+    AWAITING_NODE = 2
+    CURRENT_NODE = 3
+    DEFAULT_EDGE = 4
+    VISITED_EDGE = 5
+    AWAITING_EDGE = 6
+    CURRENT_EDGE = 7
+    MARKED_EDGE = 8
+
+
+class Animation:
+    __graph_view: 'GraphView'
+    __tracker: Tracker
+    __frames: list[Frame]
+    __animation: itertools.cycle
+    __current: Frame
+
+    __colormap: dict[ElementCategory, str] = {
+        ElementCategory.DEFAULT_NODE: '#bdbdbd',
+        ElementCategory.VISITED_NODE: '#8bb162',
+        ElementCategory.AWAITING_NODE: '#ad60ba',
+        ElementCategory.CURRENT_NODE: '#f3764f',
+        ElementCategory.DEFAULT_EDGE: '#000000',
+        ElementCategory.MARKED_EDGE: '#000000'
+    }
+
+    #        ElementCategory.VISITED_EDGE: '#8bb162',
+    #        ElementCategory.AWAITING_EDGE: '#ad60ba',
+    #        ElementCategory.CURRENT_EDGE: '#f3764f',
+
+    def __init__(self, graph_view: 'GraphView', tracker: Tracker):
+        self.__graph_view = graph_view
+        self.__frames = self.__build_frames(tracker.tracked)
+
+    @staticmethod
+    def __label_steps(
+            tracked: list[tuple[TrackerCategory, list[Any]]]
+    ) -> Iterator[list[tuple[TrackerCategory, Any]]]:
+        return (
+            [(category, state) for state in history]
+            for category, history in tracked
+        )
+
+    def __build_frames(self, tracked: list[tuple[TrackerCategory, list[Any]]]) -> list[Frame]:
+        return [
+            self.__transform(*step)
+            for step in zip(*self.__label_steps(tracked))
+        ]
+
+    @staticmethod
+    def __tree_to_edges(tree: Iterable[int]) -> list[tuple[int, int]]:
+        return [
+            (vertex, predecessor)
+            for vertex, predecessor in reversed(list(enumerate(tree)))
+            if predecessor != -1
+        ]
+
+    def __transform(self, *tracking_step: Iterable[tuple[TrackerCategory, Any]]) -> Frame:
+        node_colors = dict(
+            (index, self.__colormap[ElementCategory.DEFAULT_NODE])
+            for index in range(self.__graph_view.graph.order)
+        )
+
+        node_labels = dict(
+            (index, "")
+            for index in range(self.__graph_view.graph.order)
+        )
+
+        edge_colors = dict(
+            ((i, j), self.__colormap[ElementCategory.DEFAULT_EDGE])
+            for i in range(self.__graph_view.graph.order)
+            for j in range(self.__graph_view.graph.order)
+        )
+
+        for category, state in tracking_step:
+            match category:
+                case (TrackerCategory.STACK, stack):
+                    for vertex in stack:
+                        node_colors[vertex] = self.__colormap[ElementCategory.AWAITING_NODE]
+
+                case (TrackerCategory.QUEUE, queue):
+                    for vertex in queue:
+                        node_colors[vertex] = self.__colormap[ElementCategory.AWAITING_NODE]
+
+                case (TrackerCategory.CURRENT, current):
+                    node_colors[current] = self.__colormap[ElementCategory.CURRENT_NODE]
+
+                case (TrackerCategory.DISTANCE, distances):
+                    for vertex, distance in enumerate(distances):
+                        node_labels[vertex] = str(distance)
+
+                case (TrackerCategory.VISITED, visited):
+                    for vertex, is_visited in enumerate(visited):
+                        if not visited:
+                            continue
+
+                        node_colors[vertex] = self.__colormap[ElementCategory.VISITED_NODE]
+
+                case (TrackerCategory.EDGE_LIST, edges):
+                    for edge in edges:
+                        edge_colors[*edge] = self.__colormap[ElementCategory.MARKED_EDGE]
+
+                case (TrackerCategory.TREE, predecessors):
+                    edges = self.__tree_to_edges(predecessors)
+
+                    for edge in edges:
+                        edge_colors[*edge] = self.__colormap[ElementCategory.MARKED_EDGE]
+
+        return Frame(
+            node_colors,
+            node_labels,
+            edge_colors
+        )
+
+    def apply(self):
+        self.__graph_view.color_nodes(self.__current.node_colors)
+        self.__graph_view.label_nodes(self.__current.node_labels)
+        self.__graph_view.color_edges(self.__current.edge_colors)
+
+    def next(self):
+        self.__current = self.__animation.__next__()
+
+    def reset(self):
+        self.__animation = itertools.cycle(self.__frames)
+        self.__current = self.__animation.__next__()
 
     @staticmethod
     def validate_color(color: str) -> None:
         if re.match('^#[a-f0-9]{6}$', color) is None:
             raise ArgumentError(f'Color code {color} is invalid')
 
-    def add_frame(
-            self,
-            curr: Optional[int],
-            queue: Optional[list | deque | NDArray],
-            visited: Optional[NDArray],
-            distance: Optional[NDArray],
-            special: bool = False
-    ) -> 'Animation':
-        colors = self.map_to_colors(curr, queue, visited)
-        self.__frames.append(
-            Frame(
-                queue,
-                distance,
-                colors,
-                special
-            )
-        )
+    @classmethod
+    def set_default_colormap(cls):
+        pass
+
+    def set_colormap(self):
+        pass
+
+    def player(self) -> 'AnimationPlayer':
+        return AnimationPlayer(self)
+
+
+class AnimationPlayer(threading.Thread):
+    animation: Animation
+    __delay: float
+    __running: bool
+    __paused: bool
+    __resume: threading.Condition
+
+    def __init__(self, animation: Animation, delay: float = 0.5):
+        self.set_delay(delay)
+
+        super().__init__()
+
+        self.animation = animation
+        self.__running = False
+        self.__resume = threading.Condition()
+
+    def set_delay(self, delay: float) -> 'AnimationPlayer':
+        if delay <= 0:
+            raise ArgumentError(f"Expected positive delay value, got {delay}")
+
+        self.__delay = delay
         return self
 
-    def map_to_colors(
-            self,
-            curr:
-            Optional[int],
-            queue: Optional[list | deque | NDArray],
-            visited: Optional[NDArray]
-    ) -> NDArray:
-        colors = np.fromiter(
-            map(
-                lambda _: self.__colormap['default'],
-                self.__graph_view.nodes
-            ),
-            dtype=object
-        )
+    def run(self):
+        self.__running = True
 
-        if visited is not None:
-            colors[visited] = self.__colormap['visited']
-        if queue is not None:
-            colors[queue] = self.__colormap['awaiting']
-        if curr is not None:
-            colors[curr] = self.__colormap['current']
+        while self.__running:
+            with self.__resume:
+                if self.__paused:
+                    self.__resume.wait()
 
-        return colors
+            if not self.__running:
+                break
 
-    def reset(self) -> 'Animation':
-        self.__frame = self.__frames[0]
-        self.__frames_seq = itertools.cycle(self.__frames)
-        return self
+            self.animation.apply()
+            sleep(self.__delay)
+            self.animation.next()
+
+    def pause(self):
+        self.__paused = True
+
+    def resume(self):
+        self.__paused = False
+
+        with self.__resume:
+            self.__resume.notify()
 
     def stop(self):
         self.__running = False
 
+        with self.__resume:
+            self.__resume.notify()
+
 
 class Node:
-    position: NDArray
+    position: np.ndarray[int]
     vertex: int
     color: str
     label: str
@@ -453,14 +572,16 @@ class GraphView:
     __graph: MutableGraph
     __nodes: dict[int, Node]
     __edges: list[tuple[Node, Node]]
+    __edge_colors: np.ndarray[str]
+    __default_edge_color: str = '#ffffff'
 
     def __init__(self, graph: Graph | MutableGraph, canvas_size: Optional[tuple[int, int]] = None):
-        self.__graph = graph\
-            if isinstance(graph, MutableGraph)\
+        self.__graph = graph \
+            if isinstance(graph, MutableGraph) \
             else graph.as_mutable()
 
-        self.__canvas = canvas_size\
-            if canvas_size is not None\
+        self.__canvas = canvas_size \
+            if canvas_size is not None \
             else (1000, 1000)
 
         self.__nodes = dict(zip(
@@ -472,6 +593,11 @@ class GraphView:
         ))
 
         self.__edges = list(map(lambda edge: (self.__nodes[edge[0]], self.__nodes[edge[1]]), self.__graph.edges))
+        self.__edge_colors = np.full_like(
+            self.__graph.adj_matrix,
+            self.__default_edge_color,
+            dtype=str
+        )
 
     @property
     def graph(self) -> MutableGraph:
@@ -516,19 +642,19 @@ class GraphView:
             pickle.dump(self, file, pickle.HIGHEST_PROTOCOL)
 
     @singledispatchmethod
-    def neighbours(self, node: Node | int) -> List[Node | int]:
+    def neighbours(self, node: Node | int) -> list[Node]:
         pass
 
     @neighbours.register(Node)
-    def _node_neighbours(self, node: Node) -> List[Node]:
+    def _node_neighbours(self, node: Node) -> list[Node]:
         return list(map(lambda vertex: self.__nodes[vertex], self.__graph.neighbours(node.vertex)))
 
     @neighbours.register(int)
-    def _node_neighbours(self, vertex: int) -> List[Node]:
-        return list(map(lambda vtx: self.__nodes[vtx], self.__graph.neighbours(vertex)))
+    def _node_neighbours(self, index: int) -> list[Node]:
+        return list(map(lambda vertex: self.__nodes[vertex], self.__graph.neighbours(index)))
 
     def distribute(self, ideal_length: int) -> None:
-        distribute_fruchterman_reingold(self, ideal_length, 0.9, 500, 1000)
+        distribute_fruchterman_reingold(self, ideal_length, 0.9, 500)
 
     def add_node(self, position) -> None:
         self.__graph.add_vertex([])
@@ -539,10 +665,13 @@ class GraphView:
         self.__graph.add_edge(start, end)
         self.__edges.append((start, end))
 
-    def color_nodes(self, colors: NDArray) -> None:
-        for vertex, node in self.__nodes.items():
-            node.color = colors[vertex]
+    def color_nodes(self, colors: dict[int, str]) -> None:
+        for index, node in self.__nodes.items():
+            node.color = colors[index]
 
-    def label_nodes(self, labels: NDArray) -> None:
-        for vertex, node in self.__nodes.items():
-            node.label = str(labels[vertex])
+    def label_nodes(self, labels: dict[int, str]) -> None:
+        for index, node in self.__nodes.items():
+            node.label = str(labels[index])
+
+    def color_edges(self, colors: dict[tuple[int, int], str]):
+        self.__edge_colors[tuple(colors.keys())] = list(colors.values())
