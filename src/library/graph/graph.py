@@ -7,12 +7,9 @@ from copy import deepcopy
 from enum import Enum
 from functools import cached_property, singledispatchmethod
 from time import sleep
-from typing import Optional, Union, Callable, Any, Iterable, Iterator, List
+from typing import Optional, Union, Callable, Any, Iterable, Iterator
 
 import numpy as np
-from numba.core.typing.asnumbatype import as_numba_type
-from numba.experimental import jitclass
-from numpy.typing import NDArray
 
 from src.library.algorithms.drawing.fruchterman_reingolds import distribute_fruchterman_reingold
 from src.library.graph.representations import list_to_matrix, matrix_to_list
@@ -67,17 +64,11 @@ class Graph:
             Returns: A graph object
         """
 
-        self.__numba_dummy_typing()
-
         self._adj_list = adj_list
         self._adj_matrix = adj_matrix
         self._weighted = weighted
         self._directed = directed
         self._null_weight = null_weight
-
-    def __numba_dummy_typing(self):
-        self._adj_list = [np.array([1, 2, 3], dtype=int)]
-        self._adj_matrix = None
 
     @property
     def weighted(self) -> bool:
@@ -130,7 +121,7 @@ class Graph:
                     != self._null_weight
                 )
             ),
-            dtype=object
+            dtype=tuple[int, int]
         )
 
     def neighbours(self, vertex: int) -> np.ndarray[int]:
@@ -249,7 +240,7 @@ class MutableGraph(Graph):
                     (self._adj_matrix != self._null_weight)
                 )
             ),
-            dtype=object
+            dtype=tuple[int, int]
         )
 
     @property
