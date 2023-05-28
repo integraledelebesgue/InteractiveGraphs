@@ -3,7 +3,6 @@ import itertools
 import pickle
 import re
 import threading
-import weakref
 from copy import deepcopy
 from enum import Enum
 from functools import cached_property, singledispatchmethod
@@ -12,19 +11,9 @@ from typing import Optional, Union, Callable, Any, Iterable, Iterator
 
 import numpy as np
 
-from src.library.algorithms.drawing.fruchterman_reingolds import distribute_fruchterman_reingold
+from src.library.algorithms.drawing.spring_embedder import spring_embedder
 from src.library.graph.representations import list_to_matrix, matrix_to_list
 from src.library.graph.verification import verify_args, ArgumentError
-
-"""
-graph_field_types = [
-    ('_adj_list', as_numba_type(Optional[list[NDArray[int]]])),
-    ('_adj_matrix', as_numba_type(Optional[NDArray[int]])),
-    ('_weighted', as_numba_type(bool)),
-    ('_directed', as_numba_type(bool)),
-    ('_null_weight', as_numba_type(int))
-]
-"""
 
 
 class Graph:
@@ -234,11 +223,15 @@ class MutableGraph(Graph):
 
     @property
     @lazy
-    def edges(self) -> np.ndarray[int]:
+    def edges(self) -> np.ndarray[tuple[int, int]]:
+        to_search = self._adj_matrix\
+            if self._directed\
+            else np.triu(self._adj_matrix)
+
         return np.fromiter(
             zip(
                 *np.where(
-                    (self._adj_matrix != self._null_weight)
+                    (to_search != self._null_weight)
                 )
             ),
             dtype=object
@@ -359,7 +352,7 @@ class Animation:
         ElementCategory.AWAITING_NODE: '#ad60ba',
         ElementCategory.CURRENT_NODE: '#f3764f',
         ElementCategory.DEFAULT_EDGE: '#000000',
-        ElementCategory.MARKED_EDGE: '#000000'
+        ElementCategory.MARKED_EDGE: '#8bb162'
     }
 
     #        ElementCategory.VISITED_EDGE: '#8bb162',
@@ -407,13 +400,12 @@ class Animation:
         )
 
         edge_colors = dict(
-            ((i, j), self.__colormap[ElementCategory.DEFAULT_EDGE])
-            for i in range(self.__graph_view.graph.order)
-            for j in range(self.__graph_view.graph.order)
+            (edge, self.__colormap[ElementCategory.DEFAULT_EDGE])
+            for edge in self.__graph_view.graph.edges
         )
 
         for category, state in tracking_step:
-            match category:
+            match category, state:
                 case (TrackerCategory.STACK, stack):
                     for vertex in stack:
                         node_colors[vertex] = self.__colormap[ElementCategory.AWAITING_NODE]
@@ -431,14 +423,14 @@ class Animation:
 
                 case (TrackerCategory.VISITED, visited):
                     for vertex, is_visited in enumerate(visited):
-                        if not visited:
+                        if not is_visited:
                             continue
 
                         node_colors[vertex] = self.__colormap[ElementCategory.VISITED_NODE]
 
                 case (TrackerCategory.EDGE_LIST, edges):
                     for edge in edges:
-                        edge_colors[*edge] = self.__colormap[ElementCategory.MARKED_EDGE]
+                        edge_colors[edge] = self.__colormap[ElementCategory.MARKED_EDGE]
 
                 case (TrackerCategory.TREE, predecessors):
                     edges = self.__tree_to_edges(predecessors)
@@ -465,7 +457,7 @@ class Animation:
         self.__current = self.__animation.__next__()
 
     @staticmethod
-    def validate_color(color: str) -> None:
+    def __validate_color(color: str) -> None:
         if re.match('^#[a-f0-9]{6}$', color) is None:
             raise ArgumentError(f'Color code {color} is invalid')
 
@@ -478,6 +470,10 @@ class Animation:
 
     def player(self) -> 'AnimationPlayer':
         return AnimationPlayer(self)
+
+    @property
+    def frames(self):
+        return self.__frames
 
 
 class AnimationPlayer(threading.Thread):
@@ -585,7 +581,7 @@ class GraphView:
         self.__edge_colors = np.full_like(
             self.__graph.adj_matrix,
             self.__default_edge_color,
-            dtype=str
+            dtype=object
         )
 
     @property
@@ -643,7 +639,10 @@ class GraphView:
         return list(map(lambda vertex: self.__nodes[vertex], self.__graph.neighbours(index)))
 
     def distribute(self, ideal_length: int) -> None:
-        distribute_fruchterman_reingold(self, ideal_length, 0.9, 500)
+        spring_embedder(
+            self,
+            ideal_length
+        )
 
     def add_node(self, position) -> None:
         self.__graph.add_vertex([])
@@ -663,5 +662,9 @@ class GraphView:
             node.label = str(labels[index])
 
     def color_edges(self, colors: dict[tuple[int, int], str]):
-        for edge, color in colors.items():
-            self.__edge_colors[*edge] = color
+        for edge in self.graph.edges:
+            self.__edge_colors[edge] = colors[edge]
+
+    @property
+    def edge_colors(self) -> np.ndarray[str]:
+        return self.__edge_colors
