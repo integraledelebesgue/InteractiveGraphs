@@ -1,3 +1,4 @@
+import ctypes
 from collections import deque
 from typing import Tuple, Optional
 
@@ -24,28 +25,28 @@ def dfs(
 
     queue = deque([start])
 
-    curr = None
+    curr = ctypes.c_longlong(start)
 
     if tracker is not None:
         tracker.add(queue, TrackerCategory.QUEUE)
         tracker.add(distance, TrackerCategory.DISTANCE)
         tracker.add(traversal_tree, TrackerCategory.TREE)
-        tracker.add(curr, TrackerCategory.CURRENT)
+        tracker.add(ctypes.pointer(curr), TrackerCategory.CURRENT)
 
     while len(queue) > 0:
-        curr = queue.pop()
+        curr.value = queue.pop()
 
         if tracker is not None:
             tracker.update()
 
-        neighbours = graph.neighbours(curr)
+        neighbours = graph.neighbours(curr.value)
         neighbours = neighbours[visited[neighbours] == False]
         visited[neighbours] = True
-        distance[neighbours] = distance[curr] + \
-           graph.adj_matrix[curr, neighbours] if graph.weighted\
+        distance[neighbours] = distance[curr.value] + \
+           graph.adj_matrix[curr.value, neighbours] if graph.weighted\
             else 1
 
-        traversal_tree[neighbours] = curr
+        traversal_tree[neighbours] = curr.value
 
         queue.extend(neighbours)
 

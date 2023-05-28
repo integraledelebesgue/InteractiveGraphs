@@ -3,6 +3,7 @@ import itertools
 import pickle
 import re
 import threading
+import weakref
 from copy import deepcopy
 from enum import Enum
 from functools import cached_property, singledispatchmethod
@@ -121,7 +122,7 @@ class Graph:
                     != self._null_weight
                 )
             ),
-            dtype=tuple[int, int]
+            dtype=object
         )
 
     def neighbours(self, vertex: int) -> np.ndarray[int]:
@@ -240,7 +241,7 @@ class MutableGraph(Graph):
                     (self._adj_matrix != self._null_weight)
                 )
             ),
-            dtype=tuple[int, int]
+            dtype=object
         )
 
     @property
@@ -315,7 +316,7 @@ class Tracker:
             history.append(
                 item.copy()
                 if category != TrackerCategory.CURRENT
-                else item
+                else item[0]
             )
 
     def as_animation_of(self, graph_view: 'GraphView') -> 'Animation':
@@ -324,12 +325,6 @@ class Tracker:
     @property
     def tracked(self) -> list[tuple[TrackerCategory, list[Any]]]:
         return [(category, history) for category, _, history in self.__tracked]
-
-
-"""
-TODO: Rename GraphFrame and GraphAnimation after their implementation is complete,
-delete old Animation and Frame.
-"""
 
 
 @dataclasses.dataclass
@@ -374,6 +369,8 @@ class Animation:
     def __init__(self, graph_view: 'GraphView', tracker: Tracker):
         self.__graph_view = graph_view
         self.__frames = self.__build_frames(tracker.tracked)
+        self.__animation = itertools.cycle(self.__frames)
+        self.__current = self.__animation.__next__()
 
     @staticmethod
     def __label_steps(
@@ -497,6 +494,7 @@ class AnimationPlayer(threading.Thread):
 
         self.animation = animation
         self.__running = False
+        self.__paused = False
         self.__resume = threading.Condition()
 
     def set_delay(self, delay: float) -> 'AnimationPlayer':
@@ -540,8 +538,8 @@ class AnimationPlayer(threading.Thread):
 class Node:
     position: np.ndarray[int]
     vertex: int
-    color: str
-    label: str
+    color: str = '#000000'
+    label: str = ""
 
     def __init__(self, vertex, position: tuple[int, int] | None = None):
         self.position = np.array(position)
@@ -564,7 +562,7 @@ class GraphView:
     __nodes: dict[int, Node]
     __edges: list[tuple[Node, Node]]
     __edge_colors: np.ndarray[str]
-    __default_edge_color: str = '#ffffff'
+    __default_edge_color: str = '#000000'
 
     def __init__(self, graph: Graph | MutableGraph, canvas_size: Optional[tuple[int, int]] = None):
         self.__graph = graph \
@@ -665,4 +663,5 @@ class GraphView:
             node.label = str(labels[index])
 
     def color_edges(self, colors: dict[tuple[int, int], str]):
-        self.__edge_colors[tuple(colors.keys())] = list(colors.values())
+        for edge, color in colors.items():
+            self.__edge_colors[*edge] = color

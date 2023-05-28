@@ -1,3 +1,4 @@
+import ctypes
 from typing import Optional
 
 import numpy as np
@@ -42,7 +43,7 @@ def articulation_point(graph: Graph, start: int = 0, tracker: Optional[Tracker] 
 
     articulation_points = []
 
-    vertex = None
+    vertex = ctypes.c_longlong(start)
 
     __dfs(start, graph, visit, visit_time, low, parent)
 
@@ -50,21 +51,21 @@ def articulation_point(graph: Graph, start: int = 0, tracker: Optional[Tracker] 
         tracker.add(low, TrackerCategory.DISTANCE)
         tracker.add(visit, TrackerCategory.VISITED)
         tracker.add(parent, TrackerCategory.TREE)
-        tracker.add(vertex, TrackerCategory.CURRENT)
+        tracker.add(ctypes.pointer(vertex), TrackerCategory.CURRENT)
 
     if len([child for child in graph.neighbours(0) if parent[child] == 0]) > 1:
         articulation_points.append(0)
 
-    for vertex in range(n):
-        if vertex == start:
+    for vertex.value in range(n):
+        if vertex.value == start:
             continue
 
         if tracker is not None:
             tracker.update()
 
-        for child in filter(lambda neighbor: parent[neighbor] == vertex, graph.neighbours(vertex)):
-            if low[child] >= visit_time[vertex]:
-                articulation_points.append(vertex)
+        for child in filter(lambda neighbor: parent[neighbor] == vertex.value, graph.neighbours(vertex.value)):
+            if low[child] >= visit_time[vertex.value]:
+                articulation_points.append(vertex.value)
                 break
 
     if tracker is not None:

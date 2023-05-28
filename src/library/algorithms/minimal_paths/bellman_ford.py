@@ -1,3 +1,4 @@
+import ctypes
 from typing import Optional
 
 import numpy as np
@@ -11,24 +12,24 @@ from src.library.graph.graph import Graph, Tracker, TrackerCategory
 @positive_weights
 def bellman_ford(
         graph: Graph,
-        source: int = 0,
+        start: int = 0,
         tracker: Optional[Tracker] = None
 ) -> tuple[np.ndarray[int], np.ndarray[int]]:
     dist = np.full(graph.order, float("inf"), float)
-    dist[source] = 0
+    dist[start] = 0
 
     parents = np.full(graph.order, -1, int)
 
     edges = [(i, j) for i in range(graph.order) for j in graph.neighbours(i)]
 
-    curr = None
+    curr = ctypes.c_longlong(start)
 
     if tracker is not None:
-        tracker.add(curr, TrackerCategory.CURRENT)
+        tracker.add(ctypes.pointer(curr), TrackerCategory.CURRENT)
         tracker.add(dist, TrackerCategory.DISTANCE)
         tracker.add(parents, TrackerCategory.TREE)
 
-    for curr in range(graph.order - 1):
+    for curr.value in range(graph.order - 1):
         if tracker is not None:
             tracker.update()
 

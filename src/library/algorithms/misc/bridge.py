@@ -1,10 +1,10 @@
+import ctypes
 from typing import Optional
 
 import numpy as np
-from numpy.typing import NDArray
 
-from src.library.graph.verification import connected, undirected_only
 from src.library.graph.graph import Graph, Tracker, TrackerCategory
+from src.library.graph.verification import connected, undirected_only
 
 
 def __dfs(
@@ -36,7 +36,7 @@ def bridge(graph: Graph, start: int = 0, tracker: Optional[Tracker] = None) -> l
     visit_time = np.full(n, n, int)
     low = np.full(n, n, int)
     parent = np.full(n, -1, int)
-    vertex = None
+    vertex = ctypes.c_longlong(start)
     bridges = []
 
     visit_time[0] = 0
@@ -46,20 +46,19 @@ def bridge(graph: Graph, start: int = 0, tracker: Optional[Tracker] = None) -> l
         tracker.add(visit, TrackerCategory.VISITED)
         tracker.add(parent, TrackerCategory.TREE)
         tracker.add(low, TrackerCategory.DISTANCE)
-        tracker.add(vertex, TrackerCategory.CURRENT)
+        tracker.add(ctypes.pointer(vertex), TrackerCategory.CURRENT)
 
-    for vertex in range(n):
-        if vertex == start:
+    for vertex.value in range(n):
+        if vertex.value == start:
             continue
 
         if tracker is not None:
             tracker.update()
 
-        if low[vertex] == visit_time[vertex]:
-            bridges.append((vertex, parent[vertex]))
+        if low[vertex.value] == visit_time[vertex.value]:
+            bridges.append((vertex.value, parent[vertex.value]))
 
     if tracker is not None:
         tracker.update()
 
     return bridges
-

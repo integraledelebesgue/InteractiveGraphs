@@ -1,3 +1,4 @@
+import ctypes
 from typing import Optional
 
 from numpy.typing import NDArray
@@ -19,22 +20,22 @@ def floyd_warshall(graph: Graph, tracker: Optional[Tracker] = None) -> NDArray:
 
     distance[distance == graph.null_weight] = inf
 
-    u = None
-    v = None
-    w = None
+    u = ctypes.c_longlong(-1)
+    v = ctypes.c_longlong(-1)
+    w = ctypes.c_longlong(-1)
 
     if tracker is not None:
         tracker.add(distance, TrackerCategory.DISTANCE)
-        tracker.add(u, TrackerCategory.CURRENT)
-        tracker.add(v, TrackerCategory.CURRENT)
-        tracker.add(w, TrackerCategory.CURRENT)
+        tracker.add(ctypes.pointer(u), TrackerCategory.CURRENT)
+        tracker.add(ctypes.pointer(v), TrackerCategory.CURRENT)
+        tracker.add(ctypes.pointer(w), TrackerCategory.CURRENT)
 
-    for u in range(n):
-        for v in filter(lambda x: x != u, range(n)):
-            for w in filter(lambda x: x != u and x != v, range(n)):
-                distance[u, v] = min(
-                    distance[u, v],
-                    distance[u, w] + distance[w, v]
+    for u.value in range(n):
+        for v.value in filter(lambda x: x != u.value, range(n)):
+            for w.value in filter(lambda x: x != u.value and x != v.value, range(n)):
+                distance[u.value, v.value] = min(
+                    distance[u.value, v.value],
+                    distance[u.value, w.value] + distance[w.value, v.value]
                 )
 
                 if tracker is not None:

@@ -1,3 +1,4 @@
+import ctypes
 from typing import Optional
 
 import numpy as np
@@ -27,29 +28,29 @@ def prim(
     dist[start] = 0
     pq = [(0, start)]
 
-    vertex = None
+    vertex = ctypes.c_longlong(start)
 
     if tracker is not None:
         tracker.add(dist, TrackerCategory.DISTANCE)
         tracker.add(spanning_tree_parents, TrackerCategory.TREE)
         tracker.add(pq, TrackerCategory.QUEUE)
         tracker.add(visit, TrackerCategory.VISITED)
-        tracker.add(vertex, TrackerCategory.CURRENT)
+        tracker.add(ctypes.pointer(vertex), TrackerCategory.CURRENT)
 
     while len(pq) > 0:
-        _, vertex = heappop(pq)
+        _, vertex.value = heappop(pq)
 
         if tracker is not None:
             tracker.update()
 
-        if not visit[vertex]:
-            for neighbor in graph.neighbours(vertex):
-                weight = graph.adj_matrix[vertex, neighbor]
+        if not visit[vertex.value]:
+            for neighbor in graph.neighbours(vertex.value):
+                weight = graph.adj_matrix[vertex.value, neighbor]
                 if not visit[neighbor] and dist[neighbor] > weight:
                     dist[neighbor] = weight
-                    spanning_tree_parents[neighbor] = vertex
+                    spanning_tree_parents[neighbor] = vertex.value
                     heappush(pq, (weight, neighbor))
-            visit[vertex] = True
+            visit[vertex.value] = True
 
     if tracker is not None:
         tracker.update()
