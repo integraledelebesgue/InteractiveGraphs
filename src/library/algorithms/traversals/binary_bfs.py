@@ -12,6 +12,7 @@ from src.library.graph.verification import weighted_only, zero_weight
 
 @weighted_only
 @zero_weight
+@numba.jit(nopython=False, forceobj=True)
 def binary_bfs(
         graph: Graph,
         start: int = 0,
@@ -33,6 +34,7 @@ def binary_bfs(
         tracker.add(queue, TrackerCategory.QUEUE)
         tracker.add(distance, TrackerCategory.DISTANCE)
         tracker.add(traversal_tree, TrackerCategory.TREE)
+        tracker.add(visited, TrackerCategory.VISITED)
         tracker.add(ctypes.pointer(curr), TrackerCategory.CURRENT)
 
     while len(queue) > 0:

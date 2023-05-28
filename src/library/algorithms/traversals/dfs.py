@@ -31,6 +31,7 @@ def dfs(
         tracker.add(queue, TrackerCategory.QUEUE)
         tracker.add(distance, TrackerCategory.DISTANCE)
         tracker.add(traversal_tree, TrackerCategory.TREE)
+        tracker.add(visited, TrackerCategory.VISITED)
         tracker.add(ctypes.pointer(curr), TrackerCategory.CURRENT)
 
     while len(queue) > 0:
