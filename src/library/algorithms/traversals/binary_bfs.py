@@ -1,3 +1,4 @@
+import ctypes
 from typing import Tuple, Optional
 
 import numba
@@ -9,7 +10,6 @@ from src.library.graph.graph import Graph, TrackerCategory, Tracker
 from src.library.graph.verification import weighted_only, zero_weight
 
 
-@numba.jit
 @weighted_only
 @zero_weight
 def binary_bfs(
@@ -27,29 +27,29 @@ def binary_bfs(
 
     queue = deque([start])
 
-    curr = None
+    curr = ctypes.c_longlong(start)
 
     if tracker is not None:
         tracker.add(queue, TrackerCategory.QUEUE)
         tracker.add(distance, TrackerCategory.DISTANCE)
         tracker.add(traversal_tree, TrackerCategory.TREE)
-        tracker.add(curr, TrackerCategory.CURRENT)
+        tracker.add(ctypes.pointer(curr), TrackerCategory.CURRENT)
 
     while len(queue) > 0:
-        curr = queue.popleft()
+        curr.value = queue.popleft()
 
         if tracker is not None:
             tracker.update()
 
-        neighbours = graph.neighbours(curr)
+        neighbours = graph.neighbours(curr.value)
         neighbours = neighbours[visited[neighbours] == False]
         visited[neighbours] = True
 
-        neighbour_distances = graph.adj_matrix[curr, neighbours]
+        neighbour_distances = graph.adj_matrix[curr.value, :]
 
-        distance[neighbours] = distance[curr] + neighbour_distances
+        distance[neighbours] = distance[curr.value] + neighbour_distances[neighbours]
 
-        traversal_tree[neighbours] = curr
+        traversal_tree[neighbours] = curr.value
 
         queue.extendleft(neighbours[neighbour_distances[neighbours] == 0])
         queue.extend(neighbours[neighbour_distances[neighbours] == 1])
