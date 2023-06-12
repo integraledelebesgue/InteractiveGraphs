@@ -102,15 +102,12 @@ class Graph:
 
     @cached_property
     def edges(self) -> np.ndarray[tuple[int, int]]:
+        to_search = self._adj_matrix\
+             if self._directed\
+             else np.triu(self._adj_matrix, 0)
+
         return np.fromiter(
-            zip(
-                *np.where(
-                    (self._adj_matrix
-                     if self._directed
-                     else np.triu(self._adj_matrix, 0))
-                    != self._null_weight
-                )
-            ),
+            zip(*np.where(to_search != self._null_weight)),
             dtype=object
         )
 
@@ -229,11 +226,7 @@ class MutableGraph(Graph):
             else np.triu(self._adj_matrix)
 
         return np.fromiter(
-            zip(
-                *np.where(
-                    (to_search != self._null_weight)
-                )
-            ),
+            zip(*np.where(to_search != self._null_weight)),
             dtype=object
         )
 
@@ -303,6 +296,9 @@ class Tracker:
 
     def add(self, item: Any, category: TrackerCategory):
         self.__tracked.append((category, item, list()))
+
+    def reset(self):
+        self.__tracked.clear()
 
     def update(self):
         for category, item, history in self.__tracked:
@@ -534,7 +530,7 @@ class AnimationPlayer(threading.Thread):
 class Node:
     position: np.ndarray[int]
     vertex: int
-    color: str = '#000000'
+    color: str = '#bdbdbd'
     label: str = ""
 
     def __init__(self, vertex, position: tuple[int, int] | None = None):

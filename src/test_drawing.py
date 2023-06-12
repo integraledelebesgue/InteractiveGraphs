@@ -5,6 +5,8 @@ import numpy as np
 from src.library.graph.graph import Graph
 from src.library.graph.graph import GraphView
 from src.library.algorithms.drawing.spring_embedder import spring_embedder
+from src.library.algorithms.drawing.fruchterman_reingolds_2 import distribute
+
 
 matrix1 = np.array([
             [-1, 3, -1, -1, -1, 4, -1, -1, -1],
@@ -45,7 +47,7 @@ def plot_layout(graph_view):
     plt.plot(x_values, y_values, 'bo')
     plt.show()
 
-
+"""
 g1_view = GraphView(graph)
 plot_layout(g1_view)
 spring_embedder(g1_view)
@@ -54,4 +56,10 @@ plot_layout(g1_view)
 g2_view = GraphView(graph2)
 plot_layout(g2_view)
 spring_embedder(g2_view)
+plot_layout(g2_view)
+"""
+
+g2_view = GraphView(graph2)
+plot_layout(g2_view)
+distribute(g2_view, 100, 0.2, 0.9, 10)
 plot_layout(g2_view)

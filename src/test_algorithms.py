@@ -1,7 +1,8 @@
+import timeit
 
 import numpy as np
 
-from src.library.graph.graph import Graph
+from src.library.graph.graph import Graph, Tracker
 from src.library.algorithms.transformations.conjugate import conjugate
 from src.library.algorithms.spanning_trees.kruskal import kruskal
 from src.library.algorithms.spanning_trees.prim import prim
@@ -28,11 +29,10 @@ graph = Graph(
     null_weight=-1
 )
 
-
-# print(conjugate(graph).adj_matrix)
-# print(kruskal(graph))
-# print(prim(graph))
-# print(dijkstra(graph))
-# print(edmonds_karp(graph, 0, 4))
-# print(bridge(graph))
+print(conjugate(graph).adj_matrix)
+print(kruskal(graph))
+print(prim(graph))
+print(dijkstra(graph))
+print(edmonds_karp(graph, 0, 4))
+print(bridge(graph))
 print(articulation_point(graph))

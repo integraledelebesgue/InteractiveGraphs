@@ -1,7 +1,4 @@
 import numpy as np
-from numpy.typing import NDArray
-
-from src.library.graph.graph import GraphView
 
 
 def repulsive(u, v, c_rep):
@@ -15,7 +12,7 @@ def attractive(u, v, c_spring, c_rep, length):
         - repulsive(u, v, c_rep)
 
 
-def rescale_positions(graph: GraphView, positions):
+def rescale_positions(graph, positions):
     target_x, target_y = graph.canvas
     min_x = np.min(positions[:, 0])
     min_y = np.min(positions[:, 1])
@@ -26,8 +23,8 @@ def rescale_positions(graph: GraphView, positions):
     positions[:, 1] *= scale_y
 
 
-def spring_embedder(graph: GraphView, length: float = 100,
-                    cooling: float = 0.99, c_rep: float = 20, c_spring: float = 20, max_iter : int = 100):
+def spring_embedder(graph, length: float = 100,
+                    cooling: float = 0.99, c_rep: float = 20, c_spring: float = 20, max_iter: int = 100):
 
     node_ind = {node: index for index, node in graph.nodes.items()}
     n = len(node_ind)
@@ -49,6 +46,3 @@ def spring_embedder(graph: GraphView, length: float = 100,
     rescale_positions(graph, positions)
     for i in range(n):
         graph.nodes[i].position = positions[i]
-
-
-

@@ -1,22 +1,15 @@
-def foo(arr):
-    match arr:
-        case None:
-            arr = []
-        case []:
-            pass
-        case _:
-            arr.clear()
-
-    arr.extend(range(10))
-    print(arr)
+from enum import Enum
 
 
-a = []
-foo(a)
-print(a)
+class MyClass(Enum):
+    FIRST = 1
+    SECOND = 2
+    THIRD = 3
 
-foo(None)
 
-b = [5, 6, 7]
-foo(b)
-print(b)
+lst = [
+    (MyClass.FIRST, [1, 2, 3]),
+    (MyClass.SECOND, (0, 2)),
+    (MyClass.THIRD, 2137)
+]
+
