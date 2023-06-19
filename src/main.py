@@ -14,55 +14,32 @@ from src.library.algorithms.traversals.dfs import dfs
 from src.library.graph.graph import Graph, MutableGraph, Tracker
 
 
-@jit(nopython=True)
-def merge(list1: list[np.ndarray[int]], list2: list[np.ndarray[int]]) -> list[np.ndarray[int]]:
-    return list1 + list2
-
-
 graph = Graph(
     adj_matrix=np.array([
-        [-1, 1, -1, 1, 1],
-        [-1, -1, 1, 1, 1],
-        [-1, 1, -1, 1, 1],
+        [-1, 1, -1, 1, -1],
+        [1, -1, 1, 1, -1],
+        [-1, 1, -1, -1, -1],
         [1, 1, -1, -1, 1],
         [-1, -1, -1, 1, -1]
     ]),
     weighted=True,
-    directed=True,
+    directed=False,
     null_weight=-1
 )
 
-tracker = Tracker()
+mut = graph.as_mutable()
 
-binary_bfs(graph, tracker=tracker)
+print(mut.connected)
+print(mut.order)
 
-print(*tracker.tracked, sep='\n')
+v = mut.add_vertex([])
 
-"""
-mut_graph = graph.as_mutable()
+print(mut.connected)
 
-_ = graph.adj_list
-distance, tree = bfs(graph, 0)
+mut.add_edge(v, 0, 1)
+mut.add_edge(2, 0, 1)
 
-print(distance, tree)
+print(mut.connected)
+print(mut.order)
 
-graph2 = MutableGraph(
-    adj_matrix=np.array([
-        [-1, 1, -1, 1, 1],
-        [-1, -1, 1, 1, 1],
-        [-1, 1, -1, 1, 1],
-        [1, 1, -1, -1, 1],
-        [-1, -1, -1, 1, -1]
-    ]),
-    weighted=False,
-    directed=True,
-    null_weight=-1
-)
-
-distance, tree = bfs(graph2, 0)
-
-print(distance, tree)
-
-
-print(mut_graph.edges)
-"""
+print(mut.adj_matrix)
