@@ -3,6 +3,7 @@ import itertools
 import pickle
 import re
 import threading
+from heapq import heappush, heappop
 from copy import deepcopy
 from enum import Enum
 from functools import cached_property, singledispatchmethod
@@ -155,30 +156,52 @@ class Graph:
 
 
 class MutableGraph(Graph):
+    """A mutable version of Graph"""
+
     _adj_list: list[np.ndarray[int]]
     _adj_matrix: np.ndarray[int]
     _weighted: bool
     _directed: bool
     _null_weight: int
-    __lazy_vertices: list[list[int]]
-    __lazy_edges: tuple[list[int], list[int]]
-    __lazy_weights: list[int]
+
+    __lazy_vertices_add: dict[int, list[int] | np.ndarray[int]]
+    __lazy_vertices_delete: list[int]
+    __lazy_vertex_remainder: int
+
+    __deleted_vertices: list[int]
+
+    __lazy_edges_add: tuple[list[int], list[int], list[int]]
+    __lazy_edges_delete: tuple[list[int], list[int]]
+
+    __lazy_weights: dict[tuple[int, int], int]
+
     __modified: bool
+    __modified_flags: list[str]
 
     def __init__(self, *args, **kwargs):
         match args:
             case [graph] if isinstance(graph, Graph):
                 self.__init_from_graph(graph)
             case []:
-                super().__init__(**kwargs)
-                self.__init_from_graph(super())
+                try:
+                    super().__init__(**kwargs)
+                    self.__init_from_graph(super())
+                finally:
+                    raise ArgumentError(f'No constructor matching arguments {list(map(type, args))}')
             case _:
                 raise ArgumentError(f'No constructor matching arguments {list(map(type, args))}')
 
-        self.__lazy_vertices = [[] for _ in range(2 * len(self._adj_list))]
-        self.__lazy_edges = ([], [])
-        self.__lazy_weights = []
+        self.__lazy_vertices_add = dict()
+        self.__lazy_vertices_delete = []
+        self.__deleted_vertices = []
+        self.__lazy_vertex_remainder = 0
+
+        self.__lazy_edges_add = ([], [], [])
+        self.__lazy_edges_delete = ([], [])
+        self.__lazy_weights = dict()
+
         self.__modified = False
+        self.__modified_flags = []
 
     def __init_from_graph(self, graph: Graph) -> None:
         self._adj_list = deepcopy(graph.adj_list)
@@ -187,19 +210,30 @@ class MutableGraph(Graph):
         self._directed = graph.directed
         self._null_weight = graph.null_weight
 
+    def __set_modified(self):
+        for name in self.__modified_flags:
+            setattr(self, name, True)
+
     @staticmethod
     def lazy(method: Callable) -> Callable:
         def cacher(self, *args, **kwargs):
-            name = f'__lazy_{method}'
+            cache = f'__lazy_{method}'
+            modified = f'__modified_{method}'
 
-            if not hasattr(self, name):
-                setattr(self, name, None)
+            if not hasattr(self, cache):
+                setattr(self, cache, None)
 
-            if self.__modified or getattr(self, name) is None:
+            if not hasattr(self, modified):
+                setattr(self, modified, True)
+
+            self.__modified_flags.append(modified)
+
+            if getattr(self, modified) or getattr(self, cache) is None:
                 self.__lazy_update()
-                setattr(self, name, method(self, *args, **kwargs))
+                setattr(self, cache, method(self, *args, **kwargs))
+                setattr(self, modified, False)
 
-            return getattr(self, name)
+            return getattr(self, cache)
 
         return cacher
 
@@ -238,46 +272,185 @@ class MutableGraph(Graph):
     def neighbours(self, vertex: int) -> np.ndarray[int]:
         return self._adj_list[vertex]
 
-    def add_vertex(self, neighbours: np.ndarray[int] | list[int]) -> None:
-        pass
+    def add_vertex(self, neighbours: np.ndarray[int] | list[int]) -> int:
+        if len(self.__deleted_vertices) > 0:
+            new_vertex = heappop(self.__deleted_vertices)
 
-    def add_edge(self, start: int, end: int) -> None:
-        pass
+        else:
+            new_vertex = len(self._adj_list) + self.__lazy_vertex_remainder
+            self.__lazy_vertex_remainder += 1
 
-    def delete_vertex(self, vertex) -> None:
-        pass
+        self.__lazy_vertices_add[new_vertex] = neighbours
 
-    def delete_edge(self, start, end) -> None:
-        pass
+        self.__set_modified()
 
-    def change_weight(self, start: int, end: int, new_weight: int) -> None:
-        pass
+        return new_vertex
 
-    def __lazy_update(self) -> None:
-        if not self.__modified:
+    def __out_of_bounds(self, vertex: int) -> bool:
+        return vertex >= self._adj_matrix.shape[0] + self.__lazy_vertex_remainder \
+            or vertex < 0
+
+    def add_edge(self, start: int, end: int, weight: int = 1) -> None:
+        if weight == self._null_weight:
+            raise ArgumentError('Cannot add null-weight edge')
+
+        if weight < 0:
+            raise ArgumentError('Weight cannot be negative')
+
+        if self.__out_of_bounds(start):
+            raise ArgumentError(f"Vertex {start} doesn't belong to graph")
+
+        if self.__out_of_bounds(end):
+            raise ArgumentError(f"Vertex {end} doesn't belong to graph")
+
+        self.__lazy_edges_add[0].append(start)
+        self.__lazy_edges_add[1].append(end)
+        self.__lazy_edges_add[2].append(weight)
+
+        if not self._directed:
+            self.__lazy_edges_add[0].append(end)
+            self.__lazy_edges_add[1].append(start)
+            self.__lazy_edges_add[2].append(weight)
+
+        self.__set_modified()
+
+    def delete_vertex(self, vertex: int) -> None:
+        if self.__out_of_bounds(vertex):
+            raise ArgumentError(f"Vertex {vertex} doesn't belong to graph")
+
+        if vertex in self.__lazy_vertices_add:
+            self.__lazy_vertices_add.pop(vertex)
+            self.__lazy_vertex_remainder -= 1
+            heappush(self.__deleted_vertices, vertex)
+
+        elif vertex < len(self._adj_list):
+            self.__lazy_vertices_delete.append(vertex)
+            heappush(self.__deleted_vertices, vertex)
+
+        self.__set_modified()
+
+    def delete_edge(self, start: int, end: int) -> None:
+        if self.__out_of_bounds(start):
+            raise ArgumentError(f"Vertex {start} doesn't belong to graph")
+
+        if self.__out_of_bounds(end):
+            raise ArgumentError(f"Vertex {end} doesn't belong to graph")
+
+        self.__lazy_edges_delete[0].append(start)
+        self.__lazy_edges_delete[1].append(end)
+
+        if not self._directed:
+            self.__lazy_edges_delete[0].append(end)
+            self.__lazy_edges_delete[1].append(start)
+
+        self.__set_modified()
+
+    def change_weight(self, start: int, end: int, weight: int) -> None:
+        if not self._weighted:
             return
 
-        self.__modified = False
+        if weight == self._null_weight:
+            raise ArgumentError('Cannot add null-weight edge')
 
-        new_vertices_count = len(list(filter(None, self.__lazy_vertices)))
+        if weight < 0:
+            raise ArgumentError('Weight cannot be negative')
 
-        if new_vertices_count > 0:
-            self.__update_adj_list()
-            self.__update_adj_matrix(new_vertices_count)
+        self.__lazy_weights[(start, end)] = weight
 
-        self._adj_matrix[*self.__lazy_edges] = self.__lazy_weights
+        if not self._directed:
+            self.__lazy_weights[(end, start)] = weight
 
-    def __update_adj_matrix(self, new_vertices_count):
-        self._adj_matrix = np.pad(
-            self._adj_matrix,
-            (0, new_vertices_count),
-            'constant', constant_values=self._null_weight
-        )
+        self.__set_modified()
 
-    def __update_adj_list(self):
-        for adj_row, lazy_row in zip(self._adj_list, self.__lazy_vertices):
-            np.append(adj_row, lazy_row)
-            lazy_row.clear()
+    def __lazy_update(self) -> None:
+        self.__update_adj_matrix()
+        self.__update_adj_list()
+        self.__cleanup()
+
+    def __update_adj_matrix(self) -> None:
+        def extend():
+            self._adj_matrix = np.pad(
+                self._adj_matrix,
+                (0, self.__lazy_vertex_remainder),
+                'constant', constant_values=self._null_weight
+            )
+
+        def insert_vertices():
+            for vertex, neighbours in self.__lazy_vertices_add.items():
+                self._adj_matrix[vertex, neighbours] = 1
+
+                if not self._directed:
+                    self._adj_matrix[neighbours, vertex] = 1
+
+        def delete_vertices():
+            for vertex in self.__lazy_vertices_delete:
+                self._adj_matrix[vertex, :] = self._null_weight
+                self._adj_matrix[:, vertex] = self._null_weight
+
+        def insert_edges():
+            self._adj_matrix[self.__lazy_edges_add[0], self.__lazy_edges_add[1]] = self.__lazy_edges_add[2]
+
+        def delete_edges():
+            self._adj_matrix[self.__lazy_edges_delete[0], self.__lazy_edges_delete[1]] = self._null_weight
+
+        def update_weights():
+            for (start, end), weight in self.__lazy_weights:
+                self._adj_matrix[start, end] = weight
+
+        extend()
+        insert_vertices()
+        insert_edges()
+        update_weights()
+        delete_edges()
+        delete_vertices()
+
+    def __update_adj_list(self) -> None:
+        def extend():
+            self._adj_list.extend([
+                np.array([], dtype=int)
+                for _ in range(self.__lazy_vertex_remainder)
+            ])
+
+        def insert_vertices():
+            for vertex, neighbours in self.__lazy_vertices_add.items():
+                self._adj_list[vertex] = np.append(self._adj_list[vertex], neighbours)
+
+        def insert_edges():
+            for start, end in zip(*self.__lazy_edges_add[:2]):
+                if end not in self._adj_list[start]:
+                    self._adj_list[start] = np.append(self._adj_list[start], end).astype(int)
+
+        def delete_edges():
+            for start, end in zip(*self.__lazy_edges_delete):
+                self._adj_list[start].remove(end)
+
+        def delete_vertices():
+            for vertex in self.__lazy_vertices_delete:
+                self._adj_list[vertex] = np.delete(self._adj_list[vertex], np.s_[:])
+
+                for i, row in enumerate(self._adj_list):
+                    self._adj_list[i] = row[row != vertex]
+
+        extend()
+        insert_vertices()
+        insert_edges()
+        delete_edges()
+        delete_vertices()
+
+    def __cleanup(self) -> None:
+        self.__lazy_vertices_add.clear()
+        self.__lazy_vertices_delete.clear()
+
+        self.__lazy_edges_add[0].clear()
+        self.__lazy_edges_add[1].clear()
+        self.__lazy_edges_add[2].clear()
+
+        self.__lazy_edges_delete[0].clear()
+        self.__lazy_edges_delete[1].clear()
+
+        self.__lazy_weights.clear()
+
+        self.__lazy_vertex_remainder = 0
 
 
 class TrackerCategory(Enum):
@@ -321,6 +494,7 @@ class Frame:
     node_colors: dict[int, str]
     node_labels: dict[int, str]
     edge_colors: dict[tuple[int, int], str]
+    queues: list[tuple[TrackerCategory, Any]]
 
 
 class ElementCategory(Enum):
@@ -437,7 +611,9 @@ class Animation:
         return Frame(
             node_colors,
             node_labels,
-            edge_colors
+            edge_colors,
+            [state for category, state in tracking_step
+             if category in {TrackerCategory.QUEUE, TrackerCategory.STACK}]
         )
 
     def apply(self):
@@ -470,6 +646,10 @@ class Animation:
     @property
     def frames(self):
         return self.__frames
+
+    @property
+    def current(self) -> Frame:
+        return self.__current
 
 
 class AnimationPlayer(threading.Thread):
@@ -555,6 +735,7 @@ class GraphView:
     __edges: list[tuple[Node, Node]]
     __edge_colors: np.ndarray[str]
     __default_edge_color: str = '#000000'
+    __default_node_color: str = '#bdbdbd'
 
     def __init__(self, graph: Graph | MutableGraph, canvas_size: Optional[tuple[int, int]] = None):
         self.__graph = graph \
@@ -641,13 +822,38 @@ class GraphView:
         )
 
     def add_node(self, position) -> None:
-        self.__graph.add_vertex([])
-        number = len(self.__nodes)
-        self.__nodes[number] = Node(number, position)
+        vertex = self.__graph.add_vertex([])
+        self.__nodes[vertex] = Node(vertex, position)
 
-    def add_edge(self, start, end) -> None:
+    def delete_node(self, vertex: int) -> None:
+        self.__graph.delete_vertex(vertex)
+        self.__nodes.pop(vertex)
+
+    def add_edge(self, start: int, end: int) -> None:
         self.__graph.add_edge(start, end)
-        self.__edges.append((start, end))
+        self.__edges.append((
+            self.__nodes[start],
+            self.__nodes[end]
+        ))
+
+    def delete_edge(self, start: int, end: int) -> None:
+        self.__graph.delete_edge(start, end)
+        edge = (self.__nodes[start], self.__nodes[end])
+        self.__edges.remove(edge)
+
+    def change_weight(self, start: int, end: int, weight: int) -> None:
+        if start not in self.__nodes:
+            raise ArgumentError(f'Graph does not contain vertex {start}')
+
+        if end not in self.__nodes:
+            raise ArgumentError(f'Graph does not contain vertex {end}')
+
+        edge = (self.__nodes[start], self.__nodes[end])
+
+        if edge not in self.__edges:
+            raise ArgumentError(f'Graph does not contain edge ({start}, {end})')
+
+        self.__graph.change_weight(start, end, weight)
 
     def color_nodes(self, colors: dict[int, str]) -> None:
         for index, node in self.__nodes.items():
@@ -657,10 +863,17 @@ class GraphView:
         for index, node in self.__nodes.items():
             node.label = str(labels[index])
 
-    def color_edges(self, colors: dict[tuple[int, int], str]):
+    def color_edges(self, colors: dict[tuple[int, int], str]) -> None:
         for edge in self.graph.edges:
             self.__edge_colors[edge] = colors[edge]
 
     @property
     def edge_colors(self) -> np.ndarray[str]:
         return self.__edge_colors
+
+    def reset_animation(self) -> None:
+        for node in self.__nodes.values():
+            node.color = self.__default_node_color
+            node.label = ""
+
+        self.__edge_colors.fill(self.__default_edge_color)
