@@ -22,6 +22,12 @@ from src.library.graph.verification import ArgumentError
 
 window_size = (1400, 1000)
 
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+
 test_graph = Graph(
     adj_matrix=np.array([
         [-1, 3, -1, -1, -1, 4, -1, -1, -1],
@@ -68,21 +74,26 @@ class GraphIO:
 
 
 class App(threading.Thread):
+    WINDOW_SIZE: tuple[int, int] = (1400, 1000)
+    MAX_QUEUE_LENGTH: int = 10
+    QUEUE_ELEMENT_SIZE: int = 30
+    QUEUE_ELEMENT_SPACING: int = 10
+
     def __init__(self):
         super().__init__()
         pygame.init()
         pygame.display.set_caption('Interactive graphs')
 
-        self.window_surface = pygame.display\
+        self.window_surface = pygame.display \
             .set_mode(
-                window_size,
+                self.WINDOW_SIZE,
                 pygame.RESIZABLE
             )
 
-        self.background = pygame.Surface(window_size)
+        self.background = pygame.Surface(self.WINDOW_SIZE)
         self.background.fill(pygame.Color('#ffffff'))
 
-        self.manager = pygame_gui.UIManager(window_size)
+        self.manager = pygame_gui.UIManager(self.WINDOW_SIZE)
         self.clock = pygame.time.Clock()
         self.running = False
 
@@ -129,7 +140,7 @@ class App(threading.Thread):
         self.ui_context_menu()
 
     def play(self):
-        if self.player:
+        if self.player is not None:
             self.player.stop()
 
         self.player = self.tracker \
@@ -138,6 +149,11 @@ class App(threading.Thread):
             .set_delay(1.0)
 
         self.player.start()
+
+    def stop(self):
+        if self.player is not None:
+            self.player.stop()
+            self.player = None
 
     def reset_tracker(self):
         self.tracker.reset()
@@ -188,8 +204,21 @@ class App(threading.Thread):
             active=False
         )
 
-    def ui_edit_graph(self):
+    def ui_edit_graph(self):  # TODO handlers
         menu_button_size = (200, 25)
+
+        def complement_handler(_event):
+            pass
+
+        def distribute_handler(_event):
+            pass
+
+        def delete_handler(_event):
+            pass
+
+        def clear_animation_handler(_event):
+            self.stop()
+            self.graph_view.reset_animation()
 
         self.edit_menu = ContextMenu(
             container=(cont := pygame_gui.core.UIContainer(
@@ -203,28 +232,28 @@ class App(threading.Thread):
             items=[
                 pygame_gui.elements.UIButton(
                     relative_rect=pygame.Rect((0, 0), menu_button_size),
-                    text='Conjugate',
+                    text='Complement',
                     manager=self.manager,
                     container=cont
-                ),
+                ).set_handler(complement_handler),
                 pygame_gui.elements.UIButton(
                     relative_rect=pygame.Rect((0, 25), menu_button_size),
                     text='Distribute',
                     manager=self.manager,
                     container=cont
-                ),
+                ).set_handler(distribute_handler),
                 pygame_gui.elements.UIButton(
                     relative_rect=pygame.Rect((0, 50), menu_button_size),
                     text='Delete graph',
                     manager=self.manager,
                     container=cont
-                ),
+                ).set_handler(delete_handler),
                 pygame_gui.elements.UIButton(
                     relative_rect=pygame.Rect((0, 75), menu_button_size),
                     text='Clear animation',
                     manager=self.manager,
                     container=cont
-                )
+                ).set_handler(clear_animation_handler)
             ],
             active=False
         )
@@ -493,34 +522,34 @@ class App(threading.Thread):
 
                     # UI Button handling
 
-                    case pygame_gui.UI_BUTTON_PRESSED\
+                    case pygame_gui.UI_BUTTON_PRESSED \
                             if hasattr(event.ui_element, 'handler'):
                         event.ui_element.handler(event)
 
                     # File I/O
 
-                    case pygame.KEYDOWN\
-                        if event.key == pygame.K_RETURN\
+                    case pygame.KEYDOWN \
+                        if event.key == pygame.K_RETURN \
                             and self.load_io.active:
 
                         self.handle_load_return()
 
-                    case pygame.KEYDOWN\
-                        if event.key == pygame.K_RETURN\
-                           and self.save_io.active:
+                    case pygame.KEYDOWN \
+                        if event.key == pygame.K_RETURN \
+                            and self.save_io.active:
 
                         self.handle_save_return()
 
                     # Node dragging
 
-                    case pygame.MOUSEBUTTONDOWN\
-                        if event.button == 1\
-                            and self.dragging_allowed\
+                    case pygame.MOUSEBUTTONDOWN \
+                        if event.button == 1 \
+                            and self.dragging_allowed \
                             and (element := self.draggable_collision(event.pos)):
 
                         self.attach_to_mouse(element, event)
 
-                    case pygame.MOUSEBUTTONUP\
+                    case pygame.MOUSEBUTTONUP \
                             if self.mouse_attached and event.button == 1:
                         self.mouse_attached = None
 
@@ -532,10 +561,10 @@ class App(threading.Thread):
 
                     # Context menu
 
-                    case pygame.MOUSEBUTTONDOWN\
-                        if event.button == 3\
-                            and not self.context_menu.active\
-                            and self.graph_area.collidepoint(event.pos)\
+                    case pygame.MOUSEBUTTONDOWN \
+                        if event.button == 3 \
+                            and not self.context_menu.active \
+                            and self.graph_area.collidepoint(event.pos) \
                             and not self.node_collision(event.pos):
 
                         self.open_context_menu(event.pos)
@@ -559,8 +588,15 @@ class App(threading.Thread):
             self.manager.update(time_delta)
 
             self.window_surface.blit(self.background, (0, 0))
+
             self.draw_graph()
             self.manager.draw_ui(self.window_surface)
+
+            if self.player is not None:
+                queues = self.player.animation.current.queues
+                if len(queues) > 0:
+                    self.draw_queue(queues[0], (0, 40))
+
             pygame.display.flip()
 
         self.quit()
@@ -636,6 +672,81 @@ class App(threading.Thread):
     def node_collision(self, position) -> bool:
         if not self.graph_view and position:
             return False
+
+    def draw_queue(self, queue, offset: tuple[int, int]) -> None:
+        def truncate(q):
+            return q[:self.MAX_QUEUE_LENGTH//2] + ['...'] + q[-self.MAX_QUEUE_LENGTH//2:]
+
+        def draw_element(el, ind, background_color=BLUE, text_color=WHITE):
+            active_length = min(len(queue), self.MAX_QUEUE_LENGTH)
+
+            x = (self.WINDOW_SIZE[0] - (self.QUEUE_ELEMENT_SIZE + self.QUEUE_ELEMENT_SPACING) * active_length) / 2 + \
+                ind * (self.QUEUE_ELEMENT_SIZE + self.QUEUE_ELEMENT_SPACING) + \
+                offset[0]
+
+            y = offset[1] - self.QUEUE_ELEMENT_SIZE / 2
+
+            pygame.draw.rect(
+                self.window_surface,
+                background_color,
+                (x, y, self.QUEUE_ELEMENT_SIZE, self.QUEUE_ELEMENT_SIZE)
+            )
+
+            pygame.draw.rect(
+                self.window_surface,
+                BLACK,
+                (x, y, self.QUEUE_ELEMENT_SIZE, self.QUEUE_ELEMENT_SIZE),
+                2
+            )
+
+            text = pygame.font.Font(None, 24).render(str(el), True, text_color)
+            text_rect = text.get_rect(
+                center=(
+                    x + self.QUEUE_ELEMENT_SIZE / 2,
+                    y + self.QUEUE_ELEMENT_SIZE / 2
+                )
+            )
+
+            self.window_surface.blit(text, text_rect)
+
+        def draw_entry(entry, index, background_color=BLUE, text_color=WHITE):
+            match entry:
+                case (_priority, number):
+                    draw_element(number, index, background_color, text_color)
+
+                case number:
+                    draw_element(number, index, background_color, text_color)
+
+        def draw_top_label():
+            active_length = min(len(queue), self.MAX_QUEUE_LENGTH)
+
+            text = pygame.font\
+                .Font(None, 24)\
+                .render('Top', True, BLACK)
+
+            x = (self.WINDOW_SIZE[0] - (self.QUEUE_ELEMENT_SIZE + self.QUEUE_ELEMENT_SPACING) * active_length) / 2 + \
+                self.QUEUE_ELEMENT_SIZE / 2 + \
+                offset[0]
+
+            y = offset[1] + self.QUEUE_ELEMENT_SIZE
+
+            text_rect = text.get_rect(center=(x, y))
+
+            self.window_surface.blit(text, text_rect)
+
+        if len(queue) == 0:
+            return
+
+        view = queue \
+            if len(queue) < self.MAX_QUEUE_LENGTH \
+            else truncate(queue)
+
+        draw_entry(view[0], 0, GREEN)
+
+        for i, element in enumerate(view[1:], start=1):
+            draw_entry(element, i)
+
+        draw_top_label()
 
     def draw_graph(self) -> None:
         self.draw_background()
