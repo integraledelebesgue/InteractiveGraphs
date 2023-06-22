@@ -8,7 +8,7 @@ from copy import deepcopy
 from enum import Enum
 from functools import cached_property, singledispatchmethod
 from time import sleep
-from typing import Optional, Union, Callable, Any, Iterable, Iterator
+from typing import Optional, Union, Callable, Any, Iterable, Iterator, Tuple
 
 import numpy as np
 
@@ -726,8 +726,12 @@ class Node:
     def y(self) -> int:
         return self.position[1]
 
-    def shift(self, offset: tuple[int, int]) -> tuple[int, int]:
-        return tuple(self.position + offset)
+    def shift(self, offset: tuple[int, int]) -> None:
+        self.position += np.array(offset)
+
+    @property
+    def as_tuple(self) -> tuple[int, ...]:
+        return tuple(self.position)
 
 
 class GraphView:
