@@ -113,12 +113,8 @@ class App(threading.Thread):
             self.graph_area_size
         )
 
-        self.graph_view = test_graph.view(self.graph_area_size)
-
-        for node in self.graph_view.nodes.values():
-            node.shift(self.graph_area_corner)
-
-        # self.graph_view.distribute(50)
+        self.graph_view = None
+        self.init_graph_view(test_graph)
 
         self.player: Optional[AnimationPlayer] = None
         self.tracker: Optional[Tracker] = Tracker()
@@ -145,6 +141,11 @@ class App(threading.Thread):
 
         self.context_menu: Optional[ContextMenu] = None
         self.ui_context_menu()
+
+    def init_graph_view(self, graph: Graph) -> None:  # TODO graph_view.distribute() when embedding works properly
+        self.graph_view = graph.view(self.graph_area_size)
+        for node in self.graph_view.nodes.values():
+            node.shift(self.graph_area_corner)
 
     def play(self) -> None:
         if self.player is not None:
@@ -560,7 +561,6 @@ class App(threading.Thread):
 
                         self.mouse_attached = None
                         self.dragging_allowed = True
-                        print('Detached')
 
                     case pygame.MOUSEBUTTONDOWN \
                         if event.button == 1 \
@@ -569,7 +569,6 @@ class App(threading.Thread):
 
                         self.attach_to_mouse(element, event)
                         self.dragging_allowed = False
-                        print('Attached')
 
                     case pygame.MOUSEMOTION if (element := self.mouse_attached) is not None:
                         self.follow_mouse(element, event)
