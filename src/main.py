@@ -27,19 +27,8 @@ graph = Graph(
     null_weight=-1
 )
 
-mut = graph.as_mutable()
+view = graph.view()
 
-print(mut.connected)
-print(mut.order)
+view.distribute(100)
 
-v = mut.add_vertex([])
-
-print(mut.connected)
-
-mut.add_edge(v, 0, 1)
-mut.add_edge(2, 0, 1)
-
-print(mut.connected)
-print(mut.order)
-
-print(mut.adj_matrix)
+print([node.position for node in view.nodes.values()])

@@ -12,6 +12,7 @@ from typing import Optional, Union, Callable, Any, Iterable, Iterator
 
 import numpy as np
 
+from src.library.algorithms.drawing.fruchterman_reingolds_2 import distribute
 from src.library.algorithms.drawing.spring_embedder import spring_embedder
 from src.library.graph.representations import list_to_matrix, matrix_to_list
 from src.library.graph.verification import verify_args, ArgumentError
