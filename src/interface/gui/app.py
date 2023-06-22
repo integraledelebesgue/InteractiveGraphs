@@ -1,3 +1,4 @@
+import math
 import threading
 from dataclasses import dataclass
 from os import getcwd
@@ -79,6 +80,9 @@ class App(threading.Thread):
     QUEUE_ELEMENT_SIZE: int = 30
     QUEUE_ELEMENT_SPACING: int = 10
 
+    NODE_RADIUS: float = 20.0
+    NODE_BORDER_WIDTH: int = 3
+
     def __init__(self):
         super().__init__()
         pygame.init()
@@ -111,6 +115,10 @@ class App(threading.Thread):
         )
 
         self.graph_view = test_graph.view(self.graph_area_size)
+
+        for node in self.graph_view.nodes.values():
+            node.shift(self.graph_area_corner)
+
         # self.graph_view.distribute(50)
 
         self.player: Optional[AnimationPlayer] = None
@@ -546,16 +554,23 @@ class App(threading.Thread):
 
                     # Node dragging
 
+                    case pygame.MOUSEBUTTONUP \
+                            if self.mouse_attached is not None \
+                            and event.button == 1\
+                            and not self.dragging_allowed:
+
+                        self.mouse_attached = None
+                        self.dragging_allowed = True
+                        print('Detached')
+
                     case pygame.MOUSEBUTTONDOWN \
                         if event.button == 1 \
                             and self.dragging_allowed \
-                            and (element := self.draggable_collision(event.pos)):
+                            and (element := self.draggable_collision(event.pos)) is not None:
 
                         self.attach_to_mouse(element, event)
-
-                    case pygame.MOUSEBUTTONUP \
-                            if self.mouse_attached and event.button == 1:
-                        self.mouse_attached = None
+                        self.dragging_allowed = False
+                        print('Attached')
 
                     case pygame.MOUSEMOTION if (element := self.mouse_attached) is not None:
                         self.follow_mouse(element, event)
@@ -605,10 +620,9 @@ class App(threading.Thread):
 
         self.quit()
 
-    def follow_mouse(self, element, event):
-        mouse_x, mouse_y = event.pos
-        element.x = mouse_x + self.mouse_element_offset.x
-        element.y = mouse_y + self.mouse_element_offset.y
+    @staticmethod
+    def follow_mouse(element, event):
+        element.position[0], element.position[1] = event.pos
 
     def attach_to_mouse(self, element, event):
         self.mouse_attached = element
@@ -665,13 +679,9 @@ class App(threading.Thread):
         self.open_algorithm((-200, 200))
 
     def draggable_collision(self, position) -> Any:
-        return next(
-            filter(
-                lambda el: el.collidepoint(position),
-                self.draggable
-            ),
-            None
-        )
+        for node in self.graph_view.nodes.values():
+            if np.linalg.norm(node.position - np.array(position)) <= self.NODE_RADIUS:
+                return node
 
     def node_collision(self, position) -> bool:
         if not self.graph_view and position:
@@ -766,28 +776,45 @@ class App(threading.Thread):
 
     def draw_nodes(self):
         for node in self.graph_view.nodes.values():
-            pygame.draw.circle(
-                self.window_surface,
-                node.color,
-                node.shift(self.graph_area_corner),
-                15
-            )
+            self.draw_node_interior(node)
+            self.draw_node_border(node)
+            self.draw_node_label(node)
 
-            pygame.draw.circle(
-                self.window_surface,
-                '#000000',
-                node.shift(self.graph_area_corner),
-                15,
-                3
-            )
+    def draw_node_label(self, node):
+        label = pygame.font\
+            .Font(None, 24)\
+            .render(node.label, True, BLACK)
+
+        label_rect = label.get_rect(center=node.as_tuple)
+
+        self.window_surface.blit(label, label_rect)
+
+    def draw_node_border(self, node):
+        pygame.draw.circle(
+            self.window_surface,
+            '#000000',
+            node.as_tuple,
+            self.NODE_RADIUS,
+            self.NODE_BORDER_WIDTH
+        )
+
+    def draw_node_interior(self, node):
+        rect = pygame.draw.circle(
+            self.window_surface,
+            node.color,
+            node.as_tuple,
+            self.NODE_RADIUS
+        )
+
+        self.draggable.append(rect)
 
     def draw_edges(self):
         for start, end in self.graph_view.edges:
             pygame.draw.line(
                 self.window_surface,
                 self.graph_view.edge_colors[start.vertex, end.vertex],
-                start.shift(self.graph_area_corner),
-                end.shift(self.graph_area_corner),
+                start.as_tuple,
+                end.as_tuple,
                 4
             )
 
