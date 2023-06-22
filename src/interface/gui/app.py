@@ -1,4 +1,3 @@
-import math
 import threading
 from dataclasses import dataclass
 from os import getcwd
@@ -18,7 +17,7 @@ from src.library.algorithms.spanning_trees.prim import prim
 from src.library.algorithms.traversals.bfs import bfs
 from src.library.algorithms.traversals.binary_bfs import binary_bfs
 from src.library.algorithms.traversals.dfs import dfs
-from src.library.graph.graph import Graph, GraphView, Animation, Tracker, AnimationPlayer
+from src.library.graph.graph import Graph, GraphView, Tracker, AnimationPlayer, Node
 from src.library.graph.verification import ArgumentError
 
 window_size = (1400, 1000)
@@ -147,7 +146,7 @@ class App(threading.Thread):
         self.context_menu: Optional[ContextMenu] = None
         self.ui_context_menu()
 
-    def play(self):
+    def play(self) -> None:
         if self.player is not None:
             self.player.stop()
 
@@ -158,15 +157,15 @@ class App(threading.Thread):
 
         self.player.start()
 
-    def stop(self):
+    def stop(self) -> None:
         if self.player is not None:
             self.player.stop()
             self.player = None
 
-    def reset_tracker(self):
+    def reset_tracker(self) -> None:
         self.tracker.reset()
 
-    def ui_context_menu(self):
+    def ui_context_menu(self) -> None:
         context_menu_button_size = (200, 25)
         self.context_menu = ContextMenu(
             container=(cont := pygame_gui.core.UIContainer(
@@ -212,7 +211,7 @@ class App(threading.Thread):
             active=False
         )
 
-    def ui_edit_graph(self):  # TODO handlers
+    def ui_edit_graph(self) -> None:  # TODO handlers
         menu_button_size = (200, 25)
 
         def complement_handler(_event):
@@ -283,7 +282,7 @@ class App(threading.Thread):
             ) \
             .set_handler(edit_handler)
 
-    def ui_choose_algorithm(self):
+    def ui_choose_algorithm(self) -> None:
         menu_button_size = (200, 25)
 
         def bfs_handler(_e):
@@ -472,7 +471,7 @@ class App(threading.Thread):
             ) \
             .set_handler(choose_algorithm_handler)
 
-    def ui_save_graph(self):
+    def ui_save_graph(self) -> None:
         self.save_io = GraphIO(
             input_box=pygame_gui.elements.UITextEntryLine(
                 relative_rect=pygame.Rect((self.left_margin + 120, self.top_margin + 65), (1000, 30)),
@@ -497,7 +496,7 @@ class App(threading.Thread):
             ) \
             .set_handler(save_graph_handler)
 
-    def ui_load_graph(self):
+    def ui_load_graph(self) -> None:
         self.load_io = GraphIO(
             input_box=pygame_gui.elements.UITextEntryLine(
                 relative_rect=pygame.Rect((self.left_margin + 120, self.top_margin), (1000, 30)),
@@ -584,7 +583,7 @@ class App(threading.Thread):
                         if event.button == 3 \
                             and not self.context_menu.active \
                             and self.graph_area.collidepoint(event.pos) \
-                            and not self.node_collision(event.pos):
+                            and not self.draggable_collision(event.pos):
 
                         self.open_context_menu(event.pos)
                         self.context_menu.active = True
@@ -621,10 +620,10 @@ class App(threading.Thread):
         self.quit()
 
     @staticmethod
-    def follow_mouse(element, event):
+    def follow_mouse(element: Node, event: pygame.Event) -> None:
         element.position[0], element.position[1] = event.pos
 
-    def attach_to_mouse(self, element, event):
+    def attach_to_mouse(self, element: Node, event: pygame.Event) -> None:
         self.mouse_attached = element
         mouse_x, mouse_y = event.pos
         self.mouse_element_offset = Position(
@@ -632,12 +631,12 @@ class App(threading.Thread):
             element.y - mouse_y
         )
 
-    def handle_save_return(self):
+    def handle_save_return(self) -> None:
         self.save_io.active = False
         self.save_io.input_box.visible = False
         self.save_graph(self.save_io.input_box.get_text())
 
-    def handle_load_return(self):
+    def handle_load_return(self) -> None:
         self.load_io.active = False
         self.load_io.input_box.visible = False
         try:
@@ -652,42 +651,42 @@ class App(threading.Thread):
             self.player.stop()
         pygame.quit()
 
-    def open_context_menu(self, position) -> None:
+    def open_context_menu(self, position: tuple[int, int]) -> None:
         self.context_menu.container.set_position(position)
 
     def close_context_menu(self) -> None:
         self.open_context_menu((-200, -200))
 
-    def open_edit(self, position: Optional[tuple[int, int]] = None):
+    def open_edit(self, position: Optional[tuple[int, int]] = None) -> None:
         self.edit_menu.container.set_position(
             position
             if position is not None
             else (self.left_margin + 100, self.top_margin + 195)
         )
 
-    def close_edit(self):
+    def close_edit(self) -> None:
         self.open_edit((-200, -200))
 
-    def open_algorithm(self, position: Optional[tuple[int, int]] = None):
+    def open_algorithm(self, position: Optional[tuple[int, int]] = None) -> None:
         self.choose_algorithm.container.set_position(
             position
             if position is not None
             else (self.left_margin + 100, self.top_margin + 135)
         )
 
-    def close_algorithm(self):
+    def close_algorithm(self) -> None:
         self.open_algorithm((-200, 200))
 
-    def draggable_collision(self, position) -> Any:
+    def draggable_collision(self, position: tuple[int, int]) -> Optional[Node]:
         for node in self.graph_view.nodes.values():
             if np.linalg.norm(node.position - np.array(position)) <= self.NODE_RADIUS:
                 return node
 
-    def node_collision(self, position) -> bool:
+    def node_collision(self, position: tuple[int, int]) -> bool:
         if not self.graph_view and position:
             return False
 
-    def draw_queue(self, queue, offset: tuple[int, int]) -> None:
+    def draw_queue(self, queue: Any, offset: tuple[int, int]) -> None:
         def truncate(q):
             return q[:self.MAX_QUEUE_LENGTH//2] + ['...'] + q[-self.MAX_QUEUE_LENGTH//2:]
 
@@ -767,20 +766,20 @@ class App(threading.Thread):
         self.draw_edges()
         self.draw_nodes()
 
-    def draw_background(self):
+    def draw_background(self) -> None:
         pygame.draw.rect(
             self.window_surface,
             '#f5f5f0',
             self.graph_area
         )
 
-    def draw_nodes(self):
+    def draw_nodes(self) -> None:
         for node in self.graph_view.nodes.values():
             self.draw_node_interior(node)
             self.draw_node_border(node)
             self.draw_node_label(node)
 
-    def draw_node_label(self, node):
+    def draw_node_label(self, node: Node) -> None:
         label = pygame.font\
             .Font(None, 24)\
             .render(node.label, True, BLACK)
@@ -789,7 +788,7 @@ class App(threading.Thread):
 
         self.window_surface.blit(label, label_rect)
 
-    def draw_node_border(self, node):
+    def draw_node_border(self, node: Node) -> None:
         pygame.draw.circle(
             self.window_surface,
             '#000000',
@@ -798,7 +797,7 @@ class App(threading.Thread):
             self.NODE_BORDER_WIDTH
         )
 
-    def draw_node_interior(self, node):
+    def draw_node_interior(self, node: Node) -> None:
         rect = pygame.draw.circle(
             self.window_surface,
             node.color,
@@ -808,7 +807,7 @@ class App(threading.Thread):
 
         self.draggable.append(rect)
 
-    def draw_edges(self):
+    def draw_edges(self) -> None:
         for start, end in self.graph_view.edges:
             pygame.draw.line(
                 self.window_surface,
