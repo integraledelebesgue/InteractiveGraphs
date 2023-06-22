@@ -234,25 +234,29 @@ class App(threading.Thread):
                     relative_rect=pygame.Rect((0, 0), menu_button_size),
                     text='Complement',
                     manager=self.manager,
-                    container=cont
+                    container=cont,
+                    tool_tip_text='Replace current graph with its complementary graph'
                 ).set_handler(complement_handler),
                 pygame_gui.elements.UIButton(
                     relative_rect=pygame.Rect((0, 25), menu_button_size),
                     text='Distribute',
                     manager=self.manager,
-                    container=cont
+                    container=cont,
+                    tool_tip_text='Find new layout'
                 ).set_handler(distribute_handler),
                 pygame_gui.elements.UIButton(
                     relative_rect=pygame.Rect((0, 50), menu_button_size),
                     text='Delete graph',
                     manager=self.manager,
-                    container=cont
+                    container=cont,
+                    tool_tip_text='Delete current graph'
                 ).set_handler(delete_handler),
                 pygame_gui.elements.UIButton(
                     relative_rect=pygame.Rect((0, 75), menu_button_size),
                     text='Clear animation',
                     manager=self.manager,
-                    container=cont
+                    container=cont,
+                    tool_tip_text='Delete current animation with its coloring, labels and queue'
                 ).set_handler(clear_animation_handler)
             ],
             active=False
