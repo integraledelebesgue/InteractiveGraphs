@@ -3,7 +3,7 @@ import math
 import numpy as np
 
 
-def distribute(graph, k=0.1, iterations=50):
+def __distribute(graph, k=0.1, iterations=50):
     # Initialize node positions
     n = graph.order
     positions = np.random.rand(n, 2)
