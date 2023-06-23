@@ -3,16 +3,15 @@ import itertools
 import pickle
 import re
 import threading
-from heapq import heappush, heappop
 from copy import deepcopy
 from enum import Enum
 from functools import cached_property, singledispatchmethod
+from heapq import heappush, heappop
 from time import sleep
-from typing import Optional, Union, Callable, Any, Iterable, Iterator, Tuple
+from typing import Optional, Union, Callable, Any, Iterable, Iterator
 
 import numpy as np
 
-from src.library.algorithms.drawing.fruchterman_reingolds_2 import distribute
 from src.library.algorithms.drawing.spring_embedder import spring_embedder
 from src.library.graph.representations import list_to_matrix, matrix_to_list
 from src.library.graph.verification import verify_args, ArgumentError
@@ -103,15 +102,16 @@ class Graph:
         return self._adj_matrix
 
     @cached_property
-    def edges(self) -> np.ndarray[tuple[int, int]]:
-        to_search = self._adj_matrix\
-             if self._directed\
-             else np.triu(self._adj_matrix, 0)
+    def edges(self) -> list[tuple[int, int]]:
+        if self.directed:
+            return list(zip(*np.where(self._adj_matrix != self._null_weight)))
 
-        return np.fromiter(
-            zip(*np.where(to_search != self._null_weight)),
-            dtype=object
-        )
+        to_search = np.triu_indices(self.order, 0, self.order)
+
+        return [
+            edge for edge in zip(*to_search)
+            if self._adj_matrix[edge] != self._null_weight
+        ]
 
     def neighbours(self, vertex: int) -> np.ndarray[int]:
         if self._adj_list is not None:
@@ -255,15 +255,16 @@ class MutableGraph(Graph):
 
     @property
     @lazy
-    def edges(self) -> np.ndarray[tuple[int, int]]:
-        to_search = self._adj_matrix\
-            if self._directed\
-            else np.triu(self._adj_matrix)
+    def edges(self) -> list[tuple[int, int]]:
+        if self.directed:
+            return list(zip(*np.where(self._adj_matrix != self._null_weight)))
 
-        return np.fromiter(
-            zip(*np.where(to_search != self._null_weight)),
-            dtype=object
-        )
+        to_search = np.triu_indices(self.order, 0, self.order)
+
+        return [
+            edge for edge in zip(*to_search)
+            if self._adj_matrix[edge] != self._null_weight
+        ]
 
     @property
     @lazy
